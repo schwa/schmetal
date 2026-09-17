@@ -15,10 +15,21 @@ final class SyntaxTree {
     init(path: String, strict: Bool = true) throws {
         self.path = path
         source = try String(contentsOfFile: path, encoding: .utf8)
-        let raw = source.withCString { code in
-            path.withCString { name in msf_analyze(code, name) }
+
+        // Shader types come from a vocabulary built out of the SMetal stdlib source,
+        // so `import SMetal` resolves Buffer, Float4, GridIndex, ... during sema.
+        guard let vocabulary = msf_vocab_new() else { throw SMetalError("msf_vocab_new failed") }
+        defer { msf_vocab_free(vocabulary) }
+        ShaderStdlib.moduleName.withCString { module in
+            ShaderStdlib.source.withCString { interface in
+                _ = msf_vocab_add_interface(vocabulary, module, interface)
+            }
         }
-        guard let raw else { throw SMetalError("msf_analyze failed for \(path)") }
+
+        let raw = source.withCString { code in
+            path.withCString { name in msf_analyze_with_vocab(code, name, vocabulary) }
+        }
+        guard let raw else { throw SMetalError("msf_analyze_with_vocab failed for \(path)") }
         result = raw
 
         let errorCount = msf_error_count(raw)
@@ -28,10 +39,9 @@ final class SyntaxTree {
                 let text = msf_error_message(raw, index).map { String(cString: $0) } ?? "?"
                 return "  \(path):\(line): \(text)"
             }
-            let report = "semantic errors:\n" + messages.joined(separator: "\n")
+            let report = "\(errorCount) error(s):\n" + messages.joined(separator: "\n")
             if strict { throw SMetalError(report) }
-            FileHandle.standardError.write(Data("smetal: note: msf reported \(errorCount) unresolved symbols (expected for shader types)\n".utf8))
-            _ = report
+            FileHandle.standardError.write(Data("smetal: warning: \(report)\n".utf8))
         }
     }
 

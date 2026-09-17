@@ -55,8 +55,9 @@ Everything else is a compile error. Type annotations are required — no inferen
 
 - Paths to msf (`~/Projects/Vendor/msf`) are hardcoded in `Package.swift` and the modulemap.
   Run `make release` in msf first.
-- msf reports unresolved-symbol errors for shader types (`Buffer`, `GridIndex`); they are
-  downgraded to a note. A real implementation would feed msf a `.msfvocab` of the shader
-  standard library instead.
+- Shader types come from `Sources/smetal/ShaderStdlib.swift`, parsed by msf into a
+  vocabulary. Files must `import SMetal`; unresolved types are errors.
+- Generic subscript results (`Buffer<Float4>[i]`) need the local msf patch in
+  `~/Projects/Vendor/msf` (vocab generic params + `resolve_vocab_subscript_type`).
 - No real type checking of shader semantics: address spaces, bindings, and intrinsics are
   pattern-matched, not verified.

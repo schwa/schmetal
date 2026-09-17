@@ -1,3 +1,5 @@
+import SMetal
+
 let tint: Float = 1.0
 
 struct VertexOut {
@@ -7,13 +9,13 @@ struct VertexOut {
 
 @vertex
 func triangleVertex(vertexID: VertexIndex, positions: Buffer<Float4>, colors: Buffer<Float4>) -> VertexOut {
-    var out: RasterizerData
+    var out: VertexOut
     out.position = positions[vertexID]
     out.color = colors[vertexID] * tint
     return out
 }
 
 @fragment
-func triangleFragment(input: RasterizerData) -> Float4 {
+func triangleFragment(input: VertexOut) -> Float4 {
     return input.color
 }

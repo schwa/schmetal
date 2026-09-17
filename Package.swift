@@ -16,5 +16,6 @@ let package = Package(
                 .unsafeFlags(["-L\(msfRoot)/build/native", "-lMiniSwiftFrontend"])
             ]
         ),
+        .testTarget(name: "SMetalTests", dependencies: ["smetal"]),
     ]
 )

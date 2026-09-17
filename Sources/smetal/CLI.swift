@@ -65,7 +65,7 @@ struct CLI {
         }
         guard let input else { usage() }
 
-        let tree = try SyntaxTree(path: input, strict: false)
+        let tree = try SyntaxTree(path: input)
         var emitter = Emitter(tree: tree, specializations: specializations)
         let metal = try emitter.emit()
 
