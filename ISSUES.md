@@ -365,18 +365,20 @@ The current tests cover vector buffer access, two type errors, local inference, 
 ## 22: Shader marker attributes introduce unverified actor and wrapper semantics
 
 +++
-status: open
+status: closed
 priority: medium
 kind: task
 labels: effort:m, area:frontend
 created: 2026-09-17T15:12:14Z
-updated: 2026-09-17T15:16:14Z
+updated: 2026-09-17T16:12:43Z
+closed: 2026-09-17T16:12:43Z
 +++
 
 Stage markers are implemented as global actors and member markers as property wrappers. swiftc applies their ordinary Swift semantics during type checking even though the Metal emitter discards their implementation. Cross-stage calls, helper isolation, property initialization, and synthesized memberwise constructors have not been audited. Expected: documented and tested effects on which shader programs are accepted or rejected; do not assume these markers are semantically inert.
 
 - `2026-09-17T15:19:12Z`: Related design task #25 covers shader-language ownership. Actor and wrapper semantic validation remains scoped here.
 - `2026-09-17T15:57:03Z`: During #21 coverage work, a fixture declaring functions literally named vertex and fragment failed swiftc with invalid redeclaration of vertex/fragment because the prelude declares global actors with those names. Renaming the fixture functions to vertexMain/fragmentMain allowed all member-attribute compilation tests to pass. Include this verified name collision in the marker-semantics audit.
+- `2026-09-17T16:12:43Z`: Completed marker semantics audit with dedicated boundary tests and README table. Verified all six cross-stage directions plus nonisolated callers to all three stages reject synchronous actor-isolated calls; same-stage calls pass Swift checking but fail lowering. Ordinary labeled/unlabeled/nullary helpers work across stages and compile to Metal. Verified all three actor names collide with function declarations; memberwise wrapper constructors take wrapped values, reject wrapper objects, and omit wrapper implementation from MSL. Verified AST acceptance versus SIL definite-initialization rejection for member-by-member local construction. Red audit tests exposed silent loss of default property initialization and unresolved unlabeled helper references: now reject stored-property initializers explicitly and match the compiler reference spelling using declaration provenance/signature/type. Documented current-toolchain limits, not a general Swift compatibility guarantee. xcb build and all 31 tests including GPU checks pass; new tests and declaration validator pass lint.
 
 ---
 

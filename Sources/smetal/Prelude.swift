@@ -7,9 +7,7 @@ enum Prelude {
     static let moduleName = "SMetal"
 
     static let source = #"""
-    // Entry-point stages. Global actors are the only user-definable function
-    // attribute in Swift that needs no macro plugin; we read them back as
-    // `custom_attr type="compute"` and never actually isolate anything.
+    // Global actors encode stages without macros, but impose Swift isolation checks.
     @globalActor public actor compute { public static let shared = compute() }
     @globalActor public actor vertex { public static let shared = vertex() }
     @globalActor public actor fragment { public static let shared = fragment() }

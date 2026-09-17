@@ -80,16 +80,30 @@ No external dependencies; everything needed is in the Xcode toolchain.
 
 ## How the attributes work
 
-Swift has no user-definable function attributes, so the prelude borrows two existing
-features and never uses them for their real purpose:
+Stage markers use global actors; member markers use property wrappers.
+This avoids a macro plugin, but Swift applies the actors' and wrappers' semantics
+during type checking. Metal output contains neither actor isolation nor wrapper storage.
 
-- `@compute` / `@vertex` / `@fragment` are **global actors**. `@compute func f()` is legal
-  Swift and arrives as `custom_attr type="compute"`. Nothing is ever isolated or awaited.
-- `@position` / `@pointSize` / `@flat` / `@color` are **property wrappers**. The wrapper
-  leaves `var_decl interface_type` as the unwrapped type, so lowering reads the declared
-  type and discards the synthesized accessors and backing `_name` storage.
+The audit tests verify these boundaries with the selected Swift toolchain:
 
-This avoids needing a macro plugin, at the cost of two slightly surprising declarations.
+| Source construct | Swift AST checking | Metal lowering |
+|---|---|---|
+| Synchronous cross-stage call | Rejected by actor isolation | Not reached |
+| Nonisolated helper calls a stage function | Rejected by actor isolation | Not reached |
+| Same-stage call to another entry point | Accepted | Rejected |
+| Stage function calls a nonisolated helper | Accepted | Supported |
+| Function named `compute`, `vertex`, or `fragment` | Name collision | Not reached |
+| Memberwise constructor given a wrapped value | Accepted | Supported |
+| Memberwise constructor given a wrapper object | Type mismatch | Not reached |
+| Stored property with a default initializer | Accepted | Rejected; initialization is not implemented |
+| Uninitialized struct followed by member assignments | Accepted at AST stage | Supported; ordinary Swift SIL initialization checks reject the tested case |
+
+For example, `VertexResult(position: value)` takes a `Float4`, not a
+`position<Float4>` wrapper. Emission keeps the `[[position]]` member attribute
+and discards synthesized accessors and backing storage.
+
+These tests characterize the current toolchain and frontend invocation; they do not
+guarantee compatibility with other compiler versions or concurrency settings.
 
 ## Caveats
 

@@ -45,6 +45,12 @@ struct ShaderDeclarations {
                 try validateProperty(member, allowWrapper: true)
             case "pattern_binding_decl":
                 try validateBinding(member)
+                let entries = member.children(of: "pattern_entry")
+                guard !entries.contains(where: { entry in
+                    entry.children.contains { $0["label"] == "processed_init" }
+                }) else {
+                    throw SMetalError("stored property initializers are unsupported")
+                }
             default:
                 throw SMetalError("unsupported struct member: \(member.kind)")
             }
@@ -68,7 +74,16 @@ struct ShaderDeclarations {
         }
         let identity = declarationIdentity(reference)
         guard let function = functions.first(where: {
-            identity == "SMetalShader.(file).\($0.name ?? "")" && $0.type == reference.type
+            guard let signature = $0.name, $0.type == reference.type else {
+                return false
+            }
+            let qualified = "SMetalShader.(file).\(signature)"
+            if identity == qualified {
+                return true
+            }
+            let labels = signature.drop { $0 != "(" }.dropFirst().dropLast()
+            return labels.allSatisfy { $0 == "_" || $0 == ":" }
+                && identity == "SMetalShader.(file).\(signature.prefix { $0 != "(" })"
         }) else {
             throw SMetalError("unsupported shader callee: \(identity)")
         }
