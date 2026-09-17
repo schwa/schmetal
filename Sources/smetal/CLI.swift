@@ -66,7 +66,8 @@ struct CLI {
         guard let input else { usage() }
 
         let tree = try SyntaxTree(path: input, strict: false)
-        let metal = try Emitter(tree: tree, specializations: specializations).emit()
+        var emitter = Emitter(tree: tree, specializations: specializations)
+        let metal = try emitter.emit()
 
         let base = (input as NSString).deletingPathExtension
         let metalPath = base + ".metal"

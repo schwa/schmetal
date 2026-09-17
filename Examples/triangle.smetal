@@ -1,0 +1,19 @@
+let tint: Float = 1.0
+
+struct VertexOut {
+    @position var position: Float4
+    var color: Float4
+}
+
+@vertex
+func triangleVertex(vertexID: VertexIndex, positions: Buffer<Float4>, colors: Buffer<Float4>) -> VertexOut {
+    var out: RasterizerData
+    out.position = positions[vertexID]
+    out.color = colors[vertexID] * tint
+    return out
+}
+
+@fragment
+func triangleFragment(input: RasterizerData) -> Float4 {
+    return input.color
+}
