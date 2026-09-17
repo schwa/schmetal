@@ -5,7 +5,7 @@ Proof of concept: a shading language written in Swift syntax (`.smetal`), type-c
 with `xcrun metal` / `metallib`.
 
 ```
-.smetal --swiftc -dump-ast--> typed AST --emitter--> .metal --xcrun metal--> .air --metallib--> .metallib
+.smetal --swiftc JSON AST--> canonical nodes --emitter--> .metal --metal--> .air --metallib--> .metallib
 ```
 
 The shader is compiled as ordinary Swift against a generated prelude, so name resolution,
@@ -19,7 +19,7 @@ xcb build
 xcb run -- build Examples/add.smetal              # → add.metal + add.metallib
 xcb run -- build Examples/add.smetal -D scale=8.0 # specialize a global constant
 xcb run -- build Examples/add.smetal --emit-metal # stop after .metal
-xcb run -- dump  Examples/add.smetal              # print the msf AST
+xcb run -- dump Examples/add.smetal              # print the normalized typed AST
 ```
 
 ## Tests
@@ -69,10 +69,32 @@ are rejected during lowering. Helper overloads receive distinct internal Metal n
 Swift type errors retain source diagnostics. Valid Swift outside the supported shader
 subset receives a lowering error rather than being silently ignored.
 
+## Type identity
+
+Compilation uses only `swiftc -frontend -dump-ast -dump-ast-format json`. Each source
+gets a primary-file invocation with an explicit SDK. JSON arrives on stdout;
+diagnostics arrive on stderr. Failed compiler invocations never reach lowering.
+
+Type fields carry canonical mangled identities. A batched `swift-demangle --expand
+--tree-only` adapter decodes nominal types, metatypes, and generic arguments.
+Aliases and qualified spellings share an identity; a user-defined `Float` remains
+distinct from `Swift.Float`. Unsupported type shapes fail during lowering.
+
+Declaration references use USRs rather than printed names or source-path fragments.
+Locals need separate lexical binding because their USRs can be empty. Shadowed locals
+get distinct Metal names so their initializers still refer to the outer binding.
+Nested shader structs also receive distinct internal Metal names.
+
+JSON omits lvalue type qualifiers; read/write handling uses expression structure.
+Source locations use UTF-8 byte offsets, mapped back to the original shader path.
+
 ## Layout
 
 - `Sources/smetal/Prelude.swift` — the `SMetal` module source swiftc type-checks against
-- `Sources/smetal/TypedAST.swift` — runs `swiftc -dump-ast`, parses the dump
+- `Sources/smetal/TypedAST.swift` — frontend invocation and declaration registry
+- `Sources/smetal/JSONASTDecoder.swift` — checked JSON AST normalization and source locations
+- `Sources/smetal/DemangledSymbol.swift` — canonical type and declaration-owner decoding
+- `Sources/smetal/LocalBindings.swift` — lexical local-reference resolution
 - `Sources/smetal/Emitter.swift` — typed AST → MSL
 - `Sources/smetal/MetalCompiler.swift` — `.metal` → `.metallib`
 
@@ -107,11 +129,11 @@ guarantee compatibility with other compiler versions or concurrency settings.
 
 ## Caveats
 
-- Each build shells out to `swiftc` (~0.5s) instead of calling a parser in-process.
-- The `-dump-ast` format is not stable across compiler versions. It goes to **stderr**,
-  and rejects both `-o` and `-wmo`, so the dump and the diagnostics share one stream.
-- Prelude function bodies are stubs that return garbage. They exist only to type-check;
-  lowering is still name-based, so no shader *semantics* are verified.
+- Compilation invokes `swiftc` and `swift-demangle`; it is not an in-process frontend.
+- Neither JSON AST schemas nor the demangler tree output are guaranteed stable.
+  The adapter and regression suite are tested with Apple Swift 6.4.
+- Prelude bodies are type-checking stubs, not executable reference implementations.
+  Metal mappings remain explicit; the GPU tests cover selected operations, not every mapping.
 - No real checking of address spaces or binding indices: buffer numbering is assigned in
   declaration order, not validated against a pipeline.
 - Definite-initialization runs in SILGen, which `-dump-ast` stops short of, so

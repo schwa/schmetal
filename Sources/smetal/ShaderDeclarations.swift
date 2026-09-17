@@ -12,28 +12,22 @@ struct ShaderDeclarations {
     func validate() throws {
         for node in ast.declarations where !node.isImplicit {
             switch node.kind {
+            case "typealias": break
             case "var_decl":
-                guard node["let"] != nil else {
-                    throw SMetalError("mutable globals are unsupported")
-                }
+                guard node["let"] != nil else { throw SMetalError("mutable globals are unsupported") }
                 try validateProperty(node, allowWrapper: false)
-            case "pattern_binding_decl":
-                try validateBinding(node)
-            case "struct_decl":
-                try validateStructure(node)
+            case "pattern_binding_decl": try validateBinding(node)
+            case "struct_decl": try validateStructure(node)
             case "func_decl":
                 guard let name = node.name?.split(separator: "(").first,
                       name.first?.isLetter == true || name.first == "_" else {
                     throw SMetalError("custom operator declarations are unsupported")
                 }
-                guard node["async"] == nil, node["throws"] == nil,
-                      node.type?.contains(" async ") != true,
-                      node["thrown_type"] == "<null>",
+                guard node["async"] == nil, node["throws"] == nil, node["thrown_type"] == "<null>",
                       node.children(of: "custom_attr").count <= 1 else {
                     throw SMetalError("unsupported function effects or attributes")
                 }
-            default:
-                throw SMetalError("unsupported top-level declaration: \(node.kind)")
+            default: throw SMetalError("unsupported top-level declaration: \(node.kind)")
             }
         }
     }
@@ -41,51 +35,31 @@ struct ShaderDeclarations {
     private func validateStructure(_ node: ASTNode) throws {
         for member in node.children where !member.isImplicit {
             switch member.kind {
-            case "var_decl":
-                try validateProperty(member, allowWrapper: true)
+            case "typealias": break
+            case "struct_decl": try validateStructure(member)
+            case "var_decl": try validateProperty(member, allowWrapper: true)
             case "pattern_binding_decl":
                 try validateBinding(member)
-                let entries = member.children(of: "pattern_entry")
-                guard !entries.contains(where: { entry in
+                guard !member.children(of: "pattern_entry").contains(where: { entry in
                     entry.children.contains { $0["label"] == "processed_init" }
-                }) else {
-                    throw SMetalError("stored property initializers are unsupported")
-                }
-            default:
-                throw SMetalError("unsupported struct member: \(member.kind)")
+                }) else { throw SMetalError("stored property initializers are unsupported") }
+            default: throw SMetalError("unsupported struct member: \(member.kind)")
             }
         }
     }
 
     func functionName(_ node: ASTNode) throws -> String {
-        guard let index = functions.firstIndex(where: { $0.name == node.name && $0.type == node.type }),
-              let signature = node.name else {
-            throw SMetalError("unregistered shader function")
-        }
-        if node.firstChild(of: "custom_attr") != nil {
-            return String(signature.prefix { $0 != "(" })
-        }
-        return "smetal_helper_\(index)"
+        guard let usr = node["usr"], let index = functions.firstIndex(where: { $0["usr"] == usr }),
+              let signature = node.name else { throw SMetalError("unregistered shader function") }
+        if node.firstChild(of: "custom_attr") != nil { return String(signature.prefix { $0 != "(" }) }
+        var name = "smetal_helper_\(index)"
+        while ast.identifiers.contains(name) { name += "_" }
+        return name
     }
 
     func helperName(for reference: ASTNode) throws -> String? {
-        guard isFrom(reference, path: ast.shaderCompilerPath) else {
+        guard let usr = reference["decl"], let function = functions.first(where: { $0["usr"] == usr }) else {
             return nil
-        }
-        let identity = declarationIdentity(reference)
-        guard let function = functions.first(where: {
-            guard let signature = $0.name, $0.type == reference.type else {
-                return false
-            }
-            let qualified = "SMetalShader.(file).\(signature)"
-            if identity == qualified {
-                return true
-            }
-            let labels = signature.drop { $0 != "(" }.dropFirst().dropLast()
-            return labels.allSatisfy { $0 == "_" || $0 == ":" }
-                && identity == "SMetalShader.(file).\(signature.prefix { $0 != "(" })"
-        }) else {
-            throw SMetalError("unsupported shader callee: \(identity)")
         }
         guard function.firstChild(of: "custom_attr") == nil else {
             throw SMetalError("calling shader entry points is unsupported")
@@ -94,61 +68,41 @@ struct ShaderDeclarations {
     }
 
     func isPreludeFunction(_ reference: ASTNode, name: String) -> Bool {
-        guard isFrom(reference, path: ast.preludeCompilerPath) else {
-            return false
-        }
-        let identity = declarationIdentity(reference)
-        return identity == "SMetalShader.(file).\(name)"
-            || identity.hasPrefix("SMetalShader.(file).\(name)(")
+        registered(reference)?["source_file"] == ast.preludeCompilerPath
+            && registered(reference)?.kind == "func_decl"
+            && owner(reference) == "SMetalShader" && reference.declBaseName == name
     }
 
     func isSwiftIntrinsic(_ reference: ASTNode, name: String) -> Bool {
-        ["min", "max", "abs"].contains(name) && declarationIdentity(reference) == "Swift.(file).\(name)"
+        ["min", "max", "abs"].contains(name) && owner(reference) == "Swift" && reference.declBaseName == name
     }
 
     func validateOperator(_ reference: ASTNode, name: String) throws {
-        let identity = declarationIdentity(reference)
-        let scalars = ["Float", "Double", "Float16", "Int", "Int32", "UInt", "UInt32", "Bool"]
-        if scalars.contains(where: {
-            identity == "Swift.(file).\($0) extension.\(name)" || identity == "Swift.(file).\($0).\(name)"
-        }) {
-            return
+        let scalars = ["Float", "Double", "Float16", "Int", "Int32", "UInt", "UInt32", "Bool"].map { "Swift." + $0 }
+        guard reference.declBaseName == name, let context = owner(reference) else {
+            throw SMetalError("unresolved operator identity")
         }
-        if name == "+", identity == "Swift.(file).AdditiveArithmetic extension.+",
-           let substitutions = reference["decl"]?.components(separatedBy: "Self -> ").last,
-           scalars.contains(String(substitutions.prefix { $0 != ")" })) {
-            return
+        if scalars.contains(context) { return }
+        let replacements = reference["substitution_types"]?.split(separator: "|").map(String.init) ?? []
+        if replacements.count == 1, replacements.allSatisfy(scalars.contains) {
+            if name == "+", context == "Swift.AdditiveArithmetic" { return }
+            let comparisons = ["<", ">", "<=", ">=", "==", "!="]
+            if comparisons.contains(name), ["Swift.Comparable", "Swift.Equatable"].contains(context) {
+                return
+            }
         }
-        let comparisons = ["<", ">", "<=", ">=", "==", "!="]
-        let protocols = ["Comparable", "Equatable"]
-        if comparisons.contains(name),
-           protocols.contains(where: { identity == "Swift.(file).\($0).\(name)" }),
-           let substitutions = reference["decl"]?.components(separatedBy: "Self -> ").last,
-           scalars.contains(String(substitutions.prefix { $0 != ")" })) {
-            return
-        }
-        let vectors = ["Float2", "Float3", "Float4"]
-        if isFrom(reference, path: ast.preludeCompilerPath),
-           vectors.contains(where: { identity == "SMetalShader.(file).\($0).\(name)" }) {
-            return
-        }
-        throw SMetalError("unsupported operator declaration: \(identity)")
+        if registered(reference)?["source_file"] == ast.preludeCompilerPath,
+           ["SMetalShader.Float2", "SMetalShader.Float3", "SMetalShader.Float4"].contains(context) { return }
+        throw SMetalError("unsupported operator declaration: \(reference["decl"] ?? name)")
     }
 
     func validateConstructor(_ reference: ASTNode, typeName: String, shaderStruct: Bool) throws {
-        let identity = declarationIdentity(reference)
-        let expected = "SMetalShader.(file).\(typeName).init"
-        if isFrom(reference, path: shaderStruct ? ast.shaderCompilerPath : ast.preludeCompilerPath),
-           identity.hasPrefix(expected + "(") || identity == expected {
-            return
+        guard owner(reference) == typeName else { throw SMetalError("constructor type identity mismatch") }
+        if !shaderStruct, typeName.hasPrefix("Swift.") { return }
+        let expected = shaderStruct ? ast.shaderCompilerPath : ast.preludeCompilerPath
+        guard registered(reference)?["source_file"] == expected else {
+            throw SMetalError("unsupported constructor declaration: \(reference["decl"] ?? typeName)")
         }
-        let scalar = typeName == "Half" ? "Float16" : typeName
-        let swiftConstructor = identity.hasPrefix("Swift.(file).\(scalar) extension.init(")
-            || identity.hasPrefix("Swift.(file).\(scalar).init(")
-        if !shaderStruct, swiftConstructor {
-            return
-        }
-        throw SMetalError("unsupported constructor declaration: \(identity)")
     }
 
     func validateBinding(_ node: ASTNode) throws {
@@ -161,38 +115,26 @@ struct ShaderDeclarations {
     }
 
     func validateMember(_ reference: ASTNode) throws {
-        let identity = declarationIdentity(reference)
-        if isFrom(reference, path: ast.shaderCompilerPath) {
-            for structure in ast.declarations where structure.kind == "struct_decl" {
-                for property in structure.children(of: "var_decl") where !property.isImplicit {
-                    if identity == "SMetalShader.(file).\(structure.name ?? "").\(property.name ?? "")" {
-                        return
-                    }
-                }
-            }
+        guard let declaration = registered(reference), declaration.kind == "var_decl" else {
+            throw SMetalError("unsupported member identity")
         }
-        if isFrom(reference, path: ast.preludeCompilerPath) {
-            let vectorMembers = ["Float2": ["x", "y"], "Float3": ["x", "y", "z"],
-                                 "Float4": ["x", "y", "z", "w"], "UInt2": ["x", "y"], "UInt3": ["x", "y", "z"]]
-            for (type, members) in vectorMembers where members.contains(where: {
-                identity == "SMetalShader.(file).\(type).\($0)"
-            }) {
-                return
-            }
+        if declaration["source_file"] == ast.shaderCompilerPath { return }
+        let vectors = ["Float2", "Float3", "Float4", "UInt2", "UInt3"].map { "SMetalShader." + $0 }
+        guard declaration["source_file"] == ast.preludeCompilerPath, vectors.contains(owner(reference) ?? ""),
+              ["x", "y", "z", "w"].contains(reference.declBaseName ?? "") else {
+            throw SMetalError("unsupported member declaration: \(reference["decl"] ?? "unknown")")
         }
-        throw SMetalError("unsupported member declaration: \(identity)")
     }
 
     func validateSubscript(_ reference: ASTNode) throws {
-        guard isFrom(reference, path: ast.preludeCompilerPath),
-              declarationIdentity(reference) == "SMetalShader.(file).Buffer.subscript(_:)" else {
+        guard registered(reference)?["source_file"] == ast.preludeCompilerPath,
+              owner(reference) == "SMetalShader.Buffer", reference.declBaseName == "subscript" else {
             throw SMetalError("only Buffer subscripts are supported")
         }
     }
 
     func validateProperty(_ node: ASTNode, allowWrapper: Bool) throws {
-        guard node["static"] == nil,
-              node.children(of: "accessor_decl").allSatisfy(\.isImplicit) else {
+        guard node["static"] == nil, node.children(of: "accessor_decl").allSatisfy(\.isImplicit) else {
             throw SMetalError("computed, observed, and static properties are unsupported")
         }
         let wrappers = node.children(of: "custom_attr")
@@ -204,13 +146,6 @@ struct ShaderDeclarations {
         }
     }
 
-    private func isFrom(_ reference: ASTNode, path: String) -> Bool {
-        reference["decl"]?.contains("@\(path):") == true
-    }
-
-    private func declarationIdentity(_ reference: ASTNode) -> String {
-        let declaration = reference["decl"] ?? ""
-        let withoutSubstitutions = declaration.components(separatedBy: " [with")[0]
-        return String(withoutSubstitutions.prefix { $0 != "@" })
-    }
+    private func registered(_ reference: ASTNode) -> ASTNode? { ast.declarationsByUSR[reference["decl"] ?? ""] }
+    private func owner(_ reference: ASTNode) -> String? { ast.symbols[reference["decl"] ?? ""]?.declarationOwner }
 }

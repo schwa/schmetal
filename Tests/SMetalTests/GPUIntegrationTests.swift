@@ -15,16 +15,20 @@ private struct GPUHarness {
     func library(example: String, specializations: [String: String] = [:]) throws -> any MTLLibrary {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
+        let source = try String(contentsOf: root.appending(path: "Examples/\(example).smetal"), encoding: .utf8)
+        return try library(source: source, specializations: specializations)
+    }
+
+    func library(source: String, specializations: [String: String]) throws -> any MTLLibrary {
         let directory = FileManager.default.temporaryDirectory.appending(path: "smetal-gpu-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let sourcePath = directory.appending(path: example + ".smetal")
-        let source = try String(contentsOf: root.appending(path: "Examples/\(example).smetal"), encoding: .utf8)
+        let sourcePath = directory.appending(path: "Shader.smetal")
         try source.write(to: sourcePath, atomically: true, encoding: .utf8)
         var emitter = Emitter(ast: try TypedAST(path: sourcePath.path), specializations: specializations)
         let metal = try emitter.emit()
-        let metalPath = directory.appending(path: example + ".metal")
-        let libraryPath = directory.appending(path: example + ".metallib")
+        let metalPath = directory.appending(path: "Shader.metal")
+        let libraryPath = directory.appending(path: "Shader.metallib")
         try metal.write(to: metalPath, atomically: true, encoding: .utf8)
         try MetalCompiler.compile(metalPath: metalPath.path, libraryPath: libraryPath.path)
         return try device.makeLibrary(URL: libraryPath)
@@ -88,6 +92,34 @@ struct GPUIntegrationTests {
         let clampResult = clamped.contents().assumingMemoryBound(to: Float.self)
         for index in 0..<count {
             #expect(clampResult[index] == min(left[index] * Float(scale) + right[index], Float(scale)))
+        }
+    }
+
+    @Test func `canonical types overloads and lexical shadowing execute correctly`() throws {
+        let gpu = try GPUHarness()
+        let library = try gpu.library(source: """
+        import SMetal
+        typealias Scalar = Swift.Float
+        typealias Storage<T> = Buffer<T>
+        struct Float { var value: Scalar }
+        func choose(_ value: Scalar) -> Scalar { value + 1 }
+        func choose(_ value: Float) -> Scalar { value.value + 2 }
+        @compute func identityKernel(input: Storage<Float>, output: Buffer<Scalar>, gid: GridIndex) {
+            let value: Scalar = input[gid].value
+            if value > 0 {
+                let value = value + 1
+                output[gid] = choose(value) + choose(input[gid])
+            } else { output[gid] = choose(input[gid]) }
+        }
+        """, specializations: [:])
+        let values: [Float] = [1, 3, -2, 0]
+        let input = try gpu.buffer(values: values)
+        let output = try gpu.buffer(values: [Float](repeating: .nan, count: values.count))
+        try gpu.dispatch("identityKernel", library: library, buffers: [input, output], count: values.count)
+        let result = output.contents().assumingMemoryBound(to: Float.self)
+        for index in values.indices {
+            let value = values[index]
+            #expect(result[index] == (value > 0 ? value * 2 + 4 : value + 2))
         }
     }
 

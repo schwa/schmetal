@@ -5,16 +5,15 @@ struct Emitter {
     let ast: TypedAST
     var specializations: [String: String] = [:]
 
-    private var structTypes: Set<String> = []
+    private var structTypes: [String: String] = [:]
 
     private var shaderDeclarations: ShaderDeclarations { ShaderDeclarations(ast: ast) }
 
     private static let scalarTypes: [String: String] = [
-        "Float": "float", "Double": "float", "Int": "int", "Int32": "int",
-        "UInt": "uint", "UInt32": "uint", "Bool": "bool",
-        "Half": "half", "Float16": "half",
-        "Float2": "float2", "Float3": "float3", "Float4": "float4",
-        "UInt2": "uint2", "UInt3": "uint3",
+        "Swift.Float": "float", "Swift.Double": "float", "Swift.Int": "int", "Swift.Int32": "int",
+        "Swift.UInt": "uint", "Swift.UInt32": "uint", "Swift.Bool": "bool", "Swift.Float16": "half",
+        "SMetalShader.Float2": "float2", "SMetalShader.Float3": "float3", "SMetalShader.Float4": "float4",
+        "SMetalShader.UInt2": "uint2", "SMetalShader.UInt3": "uint3"
     ]
 
     /// Swift names that lower to an MSL function of the same or a different name.
@@ -26,21 +25,21 @@ struct Emitter {
 
     /// Initializers that lower to an MSL conversion or vector constructor.
     private static let conversions: [String: String] = [
-        "Float": "float", "Int": "int", "UInt": "uint", "UInt32": "uint",
-        "Int32": "int", "Half": "half",
-        "Float2": "float2", "Float3": "float3", "Float4": "float4",
-        "UInt2": "uint2", "UInt3": "uint3",
+        "Swift.Float": "float", "Swift.Int": "int", "Swift.UInt": "uint", "Swift.UInt32": "uint",
+        "Swift.Int32": "int", "Swift.Float16": "half",
+        "SMetalShader.Float2": "float2", "SMetalShader.Float3": "float3", "SMetalShader.Float4": "float4",
+        "SMetalShader.UInt2": "uint2", "SMetalShader.UInt3": "uint3"
     ]
 
     /// Builtin index types and their entry-point attribute.
     private static let indexAttributes: [String: String] = [
-        "GridIndex": "thread_position_in_grid",
-        "VertexIndex": "vertex_id",
-        "InstanceIndex": "instance_id",
+        "SMetalShader.GridIndex": "thread_position_in_grid",
+        "SMetalShader.VertexIndex": "vertex_id",
+        "SMetalShader.InstanceIndex": "instance_id"
     ]
 
     private static let memberAttributes: [String: String] = [
-        "position": "position", "pointSize": "point_size", "flat": "flat",
+        "SMetalShader.position": "position", "SMetalShader.pointSize": "point_size", "SMetalShader.flat": "flat"
     ]
 
     mutating func emit() throws -> String {
@@ -56,9 +55,13 @@ struct Emitter {
 
         let declarations = ast.declarations.filter { !$0.isImplicit }
 
-        for declaration in declarations where declaration.kind == "struct_decl" {
-            if let name = declaration.name { structTypes.insert(name) }
+        for (index, declaration) in ast.structures.enumerated() {
+            guard let type = declaration["instance_type"] else { throw SMetalError("unresolved struct identity") }
+            var name = "smetal_type_\(index)"
+            while ast.identifiers.contains(name) { name += "_" }
+            structTypes[type] = name
         }
+        for declaration in ast.structures { output += try emitStruct(declaration) + "\n" }
 
         // A top-level `let` shows up as a pattern_binding_decl carrying the
         // initializer plus a var_decl carrying the name; read the pair together.
@@ -70,9 +73,7 @@ struct Emitter {
                 output += try emitGlobalConstant(declaration) + "\n"
             case "var_decl":
                 break
-            case "struct_decl":
-                output += try emitStruct(declaration) + "\n"
-            case "func_decl":
+            case "struct_decl", "typealias", "func_decl":
                 break
             default:
                 throw SMetalError("unsupported top-level declaration: \(declaration.kind)")
@@ -112,7 +113,7 @@ struct Emitter {
     }
 
     private func emitStruct(_ node: ASTNode) throws -> String {
-        guard let name = node.name else { throw SMetalError("unnamed struct") }
+        guard let identity = node["instance_type"], let name = structTypes[identity] else { throw SMetalError("unresolved struct") }
 
         var members: [String] = []
         var colorIndex = 0
@@ -124,7 +125,7 @@ struct Emitter {
 
             var attribute = ""
             if let wrapper = member.firstChild(of: "custom_attr")?["type"] {
-                if wrapper == "color" {
+                if wrapper == "SMetalShader.color" {
                     attribute = " [[color(\(colorIndex))]]"
                     colorIndex += 1
                 } else if let mapped = Self.memberAttributes[wrapper] {
@@ -136,7 +137,6 @@ struct Emitter {
             members.append("    \(type) \(memberName)\(attribute);")
         }
 
-        guard !members.isEmpty else { throw SMetalError("struct '\(name)' has no stored properties") }
         return "struct \(name) {\n" + members.joined(separator: "\n") + "\n};\n"
     }
 
@@ -146,9 +146,9 @@ struct Emitter {
         let stage = node.firstChild(of: "custom_attr")?["type"]
         let qualifier: String
         switch stage {
-        case "compute": qualifier = "kernel"
-        case "vertex": qualifier = "vertex"
-        case "fragment": qualifier = "fragment"
+        case "SMetalShader.compute": qualifier = "kernel"
+        case "SMetalShader.vertex": qualifier = "vertex"
+        case "SMetalShader.fragment": qualifier = "fragment"
         case nil: qualifier = "static"
         case let other?: throw SMetalError("unknown attribute '@\(other)' on \(name)")
         }
@@ -191,9 +191,9 @@ struct Emitter {
             return "device \(elementType) *\(name)\(binding)"
         }
 
-        if structTypes.contains(type) {
+        if let structure = structTypes[type] {
             // A struct parameter on an entry point is rasterizer input.
-            return isEntryPoint ? "\(type) \(name) [[stage_in]]" : "\(type) \(name)"
+            return isEntryPoint ? "\(structure) \(name) [[stage_in]]" : "\(structure) \(name)"
         }
 
         let mapped = try metalType(type, context: "parameter '\(name)'")
@@ -233,6 +233,8 @@ struct Emitter {
             }
             return "\(type) \(name) = \(try emitExpression(initializer));"
 
+        case "typealias":
+            return nil
         case "var_decl":
             try shaderDeclarations.validateProperty(node, allowWrapper: false)
             return nil
@@ -272,7 +274,7 @@ struct Emitter {
 
     private func emitCondition(_ node: ASTNode) throws -> String {
         guard node.kind == "array", node["label"] == "conditions", !node.children.isEmpty,
-              node.children.allSatisfy({ $0.type == "Bool" }) else {
+              node.children.allSatisfy({ $0.type == "Swift.Bool" }) else {
             throw SMetalError("only Boolean conditions are supported")
         }
         return try node.children.map { "(\(try emitExpression($0)))" }.joined(separator: " && ")
@@ -371,7 +373,7 @@ extension Emitter {
         let operands = try argumentNodes.enumerated().map { index, operand in
             if index == 1, ["&&", "||"].contains(operatorName), operand.kind == "autoclosure_expr" {
                 guard operand.children.count == 2, operand.children[0].kind == "parameter_list",
-                      operand.children[0].children.isEmpty, operand.children[1].type == "Bool" else {
+                      operand.children[0].children.isEmpty, operand.children[1].type == "Swift.Bool" else {
                     throw SMetalError("unsupported Boolean autoclosure")
                 }
                 return try emitExpression(operand.children[1])
@@ -410,13 +412,13 @@ extension Emitter {
                 throw SMetalError("unresolved initializer")
             }
             try shaderDeclarations.validateConstructor(
-                reference, typeName: typeName, shaderStruct: structTypes.contains(typeName)
+                reference, typeName: typeName, shaderStruct: structTypes[typeName] != nil
             )
             if let mapped = Self.conversions[typeName] {
                 return "\(mapped)(\(operands.joined(separator: ", ")))"
             }
-            if structTypes.contains(typeName) {
-                return "\(typeName) { \(operands.joined(separator: ", ")) }"
+            if let structure = structTypes[typeName] {
+                return "\(structure) { \(operands.joined(separator: ", ")) }"
             }
             throw SMetalError("no Metal constructor for '\(typeName)'")
         }
@@ -440,8 +442,8 @@ extension Emitter {
 
     /// `Buffer<Float4>` → `Float4`.
     private func bufferElement(of type: String) -> String? {
-        guard type.hasPrefix("Buffer<"), type.hasSuffix(">") else { return nil }
-        return String(type.dropFirst("Buffer<".count).dropLast())
+        guard type.hasPrefix("SMetalShader.Buffer<"), type.hasSuffix(">") else { return nil }
+        return String(type.dropFirst("SMetalShader.Buffer<".count).dropLast())
     }
 
     private func metalReturnType(_ type: String?, context: String) throws -> String {
@@ -450,12 +452,9 @@ extension Emitter {
     }
 
     private func metalType(_ type: String?, context: String) throws -> String {
-        guard var type else { throw SMetalError("\(context) has no type") }
+        guard let type else { throw SMetalError("\(context) has no type") }
 
-        // Lvalue-ness is a property of the expression, not of the declaration.
-        if type.hasPrefix("@lvalue ") { type = String(type.dropFirst("@lvalue ".count)) }
-
-        if structTypes.contains(type) { return type }
+        if let structure = structTypes[type] { return structure }
         if let element = bufferElement(of: type) {
             return "device \(try metalType(element, context: context)) *"
         }
