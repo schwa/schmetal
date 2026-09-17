@@ -46,12 +46,16 @@ struct TypedAST {
     let source: String
     /// Top-level declarations of the shader file only; the prelude is dropped.
     let declarations: [ASTNode]
+    let shaderCompilerPath: String
+    let preludeCompilerPath: String
 
     init(path: String, strict: Bool = true) throws {
         self.path = path
         source = try String(contentsOfFile: path, encoding: .utf8)
 
         let staged = try Prelude.stage(shaderPath: path)
+        shaderCompilerPath = staged.shader.path
+        preludeCompilerPath = staged.prelude.path
         defer { try? FileManager.default.removeItem(at: staged.directory) }
 
         let dump: SwiftFrontend.Dump

@@ -320,18 +320,20 @@ SwiftFrontend.run ignores the swiftc exit status and reads stderr and stdout seq
 ## 20: Lowering ignores declaration identity and silently accepts unsupported constructs
 
 +++
-status: open
+status: closed
 priority: high
 kind: bug
 labels: effort:l, area:lowering
 created: 2026-09-17T15:12:14Z
-updated: 2026-09-17T15:16:14Z
+updated: 2026-09-17T15:48:18Z
+closed: 2026-09-17T15:48:18Z
 +++
 
 Emitter dispatches operators and intrinsics by short declaration names, and emitCall forwards unrecognized calls without checking that they refer to supported helpers. Struct emission ignores non-property members and some top-level nodes are skipped. Unsupported Swift semantics can therefore be silently discarded or emitted with unrelated Metal semantics. Expected: resolved declarations determine supported lowering, and unsupported constructs receive explicit errors. Related to #16 and #17, but covers calls and construct validation beyond type spelling.
 
 - `2026-09-17T15:16:26Z`: Supersedes #5: its old intrinsic-only rejection disappeared, while helper-call spelling and validation remain part of this issue. Related to #16 (type identity) and #17 (lowering metadata).
 - `2026-09-17T15:19:12Z`: Related architecture task #24 explores a semantic boundary; this issue retains concrete unsupported-construct and declaration-identity correctness work.
+- `2026-09-17T15:48:18Z`: Added declaration validation using source provenance, full declaration references, and helper signatures. Known prelude/Swift declarations are required for intrinsic/operator/constructor/member/subscript lowering; arbitrary calls are rejected. Helper overloads get distinct Metal names and prototypes, including calls before definitions. Unsupported imports, mutable globals, struct methods, static/computed/observed properties, async/throwing functions, custom operators, and unsupported bindings now fail explicitly. Removed the generic labelled-node fallback; Boolean condition containers are handled explicitly without dropping clauses. Red tests initially exposed four silently accepted constructs; an additional async case and helper-forward-call case were reproduced and fixed. All 18 tests pass, both examples compile to metallib, and xcb build passes. New validator and test file pass lint; existing emitter/parser complexity lint debt remains. Canonical type identity remains separately tracked by #16.
 
 ---
 

@@ -173,3 +173,87 @@ func `math intrinsic invalid arguments are rejected`(expression: String) throws 
         #expect(throws: SMetalError.self) { try TypedAST(path: path) }
     }
 }
+
+@Test(arguments: [
+    "struct Value { var x: Float; func ignored() {} }",
+    "struct Value { var x: Float { 42.0 } }",
+    "import Foundation\nfunc external() -> Float { Float.random(in: 0...1) }",
+    "func indirect(operation: (Float) -> Float, value: Float) -> Float { operation(value) }",
+    "var mutableGlobal: Float = 1.0",
+    "struct Value { static var x: Float = 1.0 }",
+    "func /(_ left: Float4, _ right: Float4) -> Float4 { left }",
+    "func asynchronous() async {}",
+    "func observed() { var value: Float = 0 { didSet {} }; value = 1 }",
+    "let first: Float = 1, second: Float = 2"
+])
+func `unsupported declarations and callees are rejected before Metal emission`(source: String) throws {
+    try withShader("import SMetal\n" + source) { path in
+        let ast = try TypedAST(path: path)
+        #expect(throws: SMetalError.self) {
+            var emitter = Emitter(ast: ast)
+            _ = try emitter.emit()
+        }
+    }
+}
+
+@Test func `helper overloads retain identity instead of becoming Metal intrinsics`() throws {
+    try withShader("""
+    import SMetal
+    @compute
+    func entry(output: Buffer<Float>, gid: GridIndex) {
+        output[gid] = sin(value: 1.0) + sin(other: 2.0) + sin(0.0)
+    }
+    func sin(value: Float) -> Float { value + 10.0 }
+    func sin(other: Float) -> Float { other + 20.0 }
+    """) { path in
+        var emitter = Emitter(ast: try TypedAST(path: path))
+        let metal = try emitter.emit()
+        #expect(metal.contains("smetal_helper_1(1.0)"))
+        #expect(metal.contains("smetal_helper_2(2.0)"))
+        #expect(metal.contains("sin(0.0)"))
+        let metalPath = path + ".metal"
+        try metal.write(toFile: metalPath, atomically: true, encoding: .utf8)
+        try MetalCompiler.compile(metalPath: metalPath, libraryPath: path + ".metallib")
+    }
+}
+
+@Test func `supported constructors preserve declaration identity`() throws {
+    try withShader("""
+    import SMetal
+    struct Pair { var value: Float }
+    @compute
+    func construct(output: Buffer<Float4>, gid: GridIndex) {
+        let scalar = Float(2)
+        let pair = Pair(value: scalar)
+        output[gid] = Float4(pair.value, scalar, scalar, scalar)
+    }
+    """) { path in
+        var emitter = Emitter(ast: try TypedAST(path: path))
+        let metal = try emitter.emit()
+        let metalPath = path + ".metal"
+        try metal.write(toFile: metalPath, atomically: true, encoding: .utf8)
+        try MetalCompiler.compile(metalPath: metalPath, libraryPath: path + ".metallib")
+    }
+}
+
+@Test func `boolean conditions retain every clause during lowering`() throws {
+    try withShader("""
+    import SMetal
+    @compute
+    func conditional(input: Buffer<Float>, output: Buffer<Float>, gid: GridIndex) {
+        let value = input[gid]
+        if value > 0, value < 1 { output[gid] = value }
+        var count: Int = 0
+        while count < 2 { count = count + 1 }
+    }
+    """) { path in
+        var emitter = Emitter(ast: try TypedAST(path: path))
+        let metal = try emitter.emit()
+        #expect(metal.contains("&&"))
+        #expect(metal.contains("value > 0"))
+        #expect(metal.contains("value < 1"))
+        let metalPath = path + ".metal"
+        try metal.write(toFile: metalPath, atomically: true, encoding: .utf8)
+        try MetalCompiler.compile(metalPath: metalPath, libraryPath: path + ".metallib")
+    }
+}

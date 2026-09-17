@@ -55,8 +55,12 @@ Types: `Float`, `Double`, `Int`, `Int32`, `UInt`, `UInt32`, `Bool`, `Half`,
 Struct members take `@position`, `@pointSize`, `@flat`, and `@color`, which become the
 matching MSL member attributes.
 
-Everything else is a compile error, reported as a `swiftc` diagnostic against the
-`.smetal` line that caused it.
+Globals must be stored constants. Struct methods, computed/static/observed properties,
+custom operators, async/throwing functions, indirect calls, and additional imports
+are rejected during lowering. Helper overloads receive distinct internal Metal names.
+
+Swift type errors retain source diagnostics. Valid Swift outside the supported shader
+subset receives a lowering error rather than being silently ignored.
 
 ## Layout
 
