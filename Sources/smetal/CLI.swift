@@ -29,7 +29,9 @@ struct CLI {
         switch command {
         case "dump":
             guard let path = rest.first else { usage() }
-            dump(node: try SyntaxTree(path: path, strict: false).root, indent: 0)
+            for declaration in try TypedAST(path: path, strict: false).declarations {
+                dump(node: declaration, indent: 0)
+            }
 
         case "build":
             try build(arguments: rest)
@@ -65,8 +67,8 @@ struct CLI {
         }
         guard let input else { usage() }
 
-        let tree = try SyntaxTree(path: input)
-        var emitter = Emitter(tree: tree, specializations: specializations)
+        let ast = try TypedAST(path: input)
+        var emitter = Emitter(ast: ast, specializations: specializations)
         let metal = try emitter.emit()
 
         let base = (input as NSString).deletingPathExtension
@@ -80,8 +82,13 @@ struct CLI {
         print("wrote \(libraryPath)")
     }
 
-    static func dump(node: Node, indent: Int) {
-        print(String(repeating: "  ", count: indent) + "\(node.kindName)  «\(node.text.prefix(50))»")
+    static func dump(node: ASTNode, indent: Int) {
+        let details = node.fields
+            .filter { ["type", "interface_type", "decl", "value", "name", "result"].contains($0.key) }
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: " ")
+        print(String(repeating: "  ", count: indent) + "\(node.kind)  \(details)")
         for child in node.children { dump(node: child, indent: indent + 1) }
     }
 }

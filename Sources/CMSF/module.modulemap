@@ -1,4 +1,0 @@
-module CMSF {
-    header "/Users/schwa/Projects/Vendor/msf/include/msf.h"
-    export *
-}

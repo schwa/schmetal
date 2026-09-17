@@ -28,11 +28,11 @@ private func withShader(_ source: String, body: (String) throws -> Void) throws 
     @fragment
     func fragmentMain(input: VertexOut) -> Float4 { return input.color }
     """) { path in
-        let tree = try SyntaxTree(path: path)
-        var emitter = Emitter(tree: tree)
+        let ast = try TypedAST(path: path)
+        var emitter = Emitter(ast: ast)
         let metal = try emitter.emit()
         #expect(metal.contains("device float4 *positions"))
-        #expect(metal.contains("colors[id] * 0.5"))
+        #expect(metal.contains("(colors[id] * 0.5)"))
         let metalPath = path + ".metal"
         let libraryPath = path + ".metallib"
         try metal.write(toFile: metalPath, atomically: true, encoding: .utf8)
@@ -41,9 +41,37 @@ private func withShader(_ source: String, body: (String) throws -> Void) throws 
     }
 }
 
+@Test func `local types are inferred without annotations`() throws {
+    try withShader("""
+    import SMetal
+    @compute
+    func infer(a: Buffer<Float>, out: Buffer<Float>, gid: GridIndex) {
+        let doubled = a[gid] * 2.0
+        out[gid] = doubled
+    }
+    """) { path in
+        var emitter = Emitter(ast: try TypedAST(path: path))
+        let metal = try emitter.emit()
+        #expect(metal.contains("float doubled = (a[gid] * 2.0)"))
+    }
+}
+
+@Test func `global constant can be specialized`() throws {
+    try withShader("""
+    import SMetal
+    let scale: Float = 2.0
+    @compute
+    func scaled(out: Buffer<Float>, gid: GridIndex) { out[gid] = scale }
+    """) { path in
+        var emitter = Emitter(ast: try TypedAST(path: path), specializations: ["scale": "8.0"])
+        let metal = try emitter.emit()
+        #expect(metal.contains("constant float scale = 8.0;"))
+    }
+}
+
 @Test func `unknown shader type is rejected`() throws {
     try withShader("import SMetal\nfunc bad(value: MissingType) {}") { path in
-        #expect(throws: SMetalError.self) { try SyntaxTree(path: path) }
+        #expect(throws: SMetalError.self) { try TypedAST(path: path) }
     }
 }
 
@@ -55,6 +83,6 @@ private func withShader(_ source: String, body: (String) throws -> Void) throws 
         value = values[0]
     }
     """) { path in
-        #expect(throws: SMetalError.self) { try SyntaxTree(path: path) }
+        #expect(throws: SMetalError.self) { try TypedAST(path: path) }
     }
 }

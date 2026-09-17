@@ -1,12 +1,16 @@
 # smetal
 
-Proof of concept: a shading language written in Swift syntax (`.smetal`), parsed with
-[msf](file:///Users/schwa/Projects/Vendor/msf) (Mini Swift Frontend), translated to
-specialized `.metal` source, and compiled to `.metallib` with `xcrun metal` / `metallib`.
+Proof of concept: a shading language written in Swift syntax (`.smetal`), type-checked by
+`swiftc` itself, translated to specialized `.metal` source, and compiled to `.metallib`
+with `xcrun metal` / `metallib`.
 
 ```
-.smetal --msf--> Swift AST --emitter--> .metal --xcrun metal--> .air --metallib--> .metallib
+.smetal --swiftc -dump-ast--> typed AST --emitter--> .metal --xcrun metal--> .air --metallib--> .metallib
 ```
+
+The shader is compiled as ordinary Swift against a generated prelude, so name resolution,
+overload selection, and type inference are the real Swift implementations rather than an
+approximation of them.
 
 ## Use
 
@@ -28,36 +32,56 @@ func addArrays(a: Buffer<Float>,  // → device float *a [[buffer(0)]]
                b: Buffer<Float>,
                out: Buffer<Float>,
                gid: GridIndex) {  // → uint gid [[thread_position_in_grid]]
-    let sum: Float = a[gid] * scale + b[gid]
+    let sum = a[gid] * scale + b[gid]  // type inferred
     out[gid] = sum
 }
 ```
 
-Supported: typed `let`/`var`, assignment, `if`/`else`, `while`, `return`, literals,
-binary/unary/ternary/paren expressions, subscripts, member access, and a fixed set of
-Metal intrinsics (`min`, `max`, `abs`, `sqrt`, `sin`, `cos`, `pow`, `clamp`, `floor`,
-`ceil`, `mix`, `dot`, plus `Float`/`Int`/`UInt` casts).
+Supported: `let`/`var` with or without annotations, assignment, `if`/`else`, `while`,
+`return`, literals, binary/unary/ternary/paren expressions, subscripts, member access,
+struct declarations and initializers, calls to helper functions in the same file, and a
+fixed set of Metal intrinsics (`min`, `max`, `abs`, `sqrt`, `sin`, `cos`, `pow`, `clamp`,
+`floor`, `ceil`, `mix`, `dot`, plus scalar/vector conversions).
 
 Types: `Float`, `Double`, `Int`, `Int32`, `UInt`, `UInt32`, `Bool`, `Half`,
-`Float2/3/4`, `UInt2/3`, `Buffer<T>`, `GridIndex`.
+`Float2/3/4`, `UInt2/3`, `Buffer<T>`, `GridIndex`, `VertexIndex`, `InstanceIndex`.
 
-Everything else is a compile error. Type annotations are required — no inference.
+Struct members take `@position`, `@pointSize`, `@flat`, and `@color`, which become the
+matching MSL member attributes.
+
+Everything else is a compile error, reported as a `swiftc` diagnostic against the
+`.smetal` line that caused it.
 
 ## Layout
 
-- `Sources/CMSF` — modulemap over `msf.h`
-- `Sources/MSFStubs` — `module_stub_find` stub the static lib needs
-- `Sources/smetal/SyntaxTree.swift` — Swift wrapper over the msf AST
-- `Sources/smetal/Emitter.swift` — AST → MSL
+- `Sources/smetal/Prelude.swift` — the `SMetal` module source swiftc type-checks against
+- `Sources/smetal/TypedAST.swift` — runs `swiftc -dump-ast`, parses the dump
+- `Sources/smetal/Emitter.swift` — typed AST → MSL
 - `Sources/smetal/MetalCompiler.swift` — `.metal` → `.metallib`
+
+No external dependencies; everything needed is in the Xcode toolchain.
+
+## How the attributes work
+
+Swift has no user-definable function attributes, so the prelude borrows two existing
+features and never uses them for their real purpose:
+
+- `@compute` / `@vertex` / `@fragment` are **global actors**. `@compute func f()` is legal
+  Swift and arrives as `custom_attr type="compute"`. Nothing is ever isolated or awaited.
+- `@position` / `@pointSize` / `@flat` / `@color` are **property wrappers**. The wrapper
+  leaves `var_decl interface_type` as the unwrapped type, so lowering reads the declared
+  type and discards the synthesized accessors and backing `_name` storage.
+
+This avoids needing a macro plugin, at the cost of two slightly surprising declarations.
 
 ## Caveats
 
-- Paths to msf (`~/Projects/Vendor/msf`) are hardcoded in `Package.swift` and the modulemap.
-  Run `make release` in msf first.
-- Shader types come from `Sources/smetal/ShaderStdlib.swift`, parsed by msf into a
-  vocabulary. Files must `import SMetal`; unresolved types are errors.
-- Generic subscript results (`Buffer<Float4>[i]`) need the local msf patch in
-  `~/Projects/Vendor/msf` (vocab generic params + `resolve_vocab_subscript_type`).
-- No real type checking of shader semantics: address spaces, bindings, and intrinsics are
-  pattern-matched, not verified.
+- Each build shells out to `swiftc` (~0.5s) instead of calling a parser in-process.
+- The `-dump-ast` format is not stable across compiler versions. It goes to **stderr**,
+  and rejects both `-o` and `-wmo`, so the dump and the diagnostics share one stream.
+- Prelude function bodies are stubs that return garbage. They exist only to type-check;
+  lowering is still name-based, so no shader *semantics* are verified.
+- No real checking of address spaces or binding indices: buffer numbering is assigned in
+  declaration order, not validated against a pipeline.
+- Definite-initialization runs in SILGen, which `-dump-ast` stops short of, so
+  `var out: VertexOut` with no initializer is accepted (and is what shaders want).
