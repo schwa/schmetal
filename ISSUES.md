@@ -373,18 +373,20 @@ Stage markers are implemented as global actors and member markers as property wr
 ## 23: Advertised math intrinsics are missing from the Swift prelude
 
 +++
-status: open
+status: closed
 priority: high
 kind: bug
 labels: effort:m, area:language
 created: 2026-09-17T15:12:14Z
-updated: 2026-09-17T15:16:14Z
+updated: 2026-09-17T15:33:17Z
+closed: 2026-09-17T15:33:17Z
 +++
 
 The README and emitter advertise sqrt, sin, cos, pow, floor, and ceil, but Prelude.source neither declares them nor imports a module providing them to shader files. Such calls cannot reach lowering when swiftc cannot resolve them. Vector and scalar overload coverage is also unverified. Expected: every advertised intrinsic resolves for its documented argument types and emits compilable Metal. Distinct from #5, which concerns extending the fixed intrinsic set.
 
 - `2026-09-17T15:16:26Z`: Related to #21 for regression coverage of advertised intrinsic overloads. The historical #5 allowlist issue is superseded by #20 and is not the missing-prelude-declaration bug.
 - `2026-09-17T15:19:12Z`: Related design task #25 covers language-definition ownership; restoring advertised intrinsic support remains a separate correctness issue here.
+- `2026-09-17T15:33:17Z`: Added concrete prelude overloads for sqrt/sin/cos/floor/ceil/abs/pow/min/max/clamp/mix across Float, Double, Half, and Float2/3/4, plus vector dot and scalar/vector mix weights. Documented the supported overload surface and existing Double-to-float lowering. Parameterized regression failed before the fix with missing math names and overload errors; all six scalar/vector compilation cases, three dot/vector-mix cases, and four invalid-argument cases now pass. Each valid case compiles generated MSL to metallib. xcb build and full test suite pass. Lint has only the pre-existing large staging tuple warning.
 
 ---
 

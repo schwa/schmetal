@@ -43,6 +43,12 @@ struct declarations and initializers, calls to helper functions in the same file
 fixed set of Metal intrinsics (`min`, `max`, `abs`, `sqrt`, `sin`, `cos`, `pow`, `clamp`,
 `floor`, `ceil`, `mix`, `dot`, plus scalar/vector conversions).
 
+Math overloads: `sqrt`, `sin`, `cos`, `floor`, `ceil`, `abs`, `pow`, `min`, `max`,
+`clamp`, and `mix` accept `Float`, `Double`, `Half`, and `Float2/3/4`. Arguments
+have matching types; vector `mix` also accepts a scalar `Float` weight.
+`dot` accepts matching `Float2/3/4` arguments and returns `Float`.
+`Double` lowers to Metal `float`, not double precision.
+
 Types: `Float`, `Double`, `Int`, `Int32`, `UInt`, `UInt32`, `Bool`, `Half`,
 `Float2/3/4`, `UInt2/3`, `Buffer<T>`, `GridIndex`, `VertexIndex`, `InstanceIndex`.
 

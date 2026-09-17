@@ -109,11 +109,29 @@ enum Prelude {
     public func min<T: Comparable>(_ a: T, _ b: T) -> T { a }
     public func max<T: Comparable>(_ a: T, _ b: T) -> T { a }
     public func clamp<T: Comparable>(_ x: T, _ low: T, _ high: T) -> T { x }
-    public func mix(_ a: Float, _ b: Float, _ t: Float) -> Float { a }
-    public func mix(_ a: Float4, _ b: Float4, _ t: Float) -> Float4 { a }
-    public func dot(_ a: Float3, _ b: Float3) -> Float { 0 }
-    public func dot(_ a: Float4, _ b: Float4) -> Float { 0 }
-    """#
+    """# + "\n" + mathDeclarations
+
+    private static var mathDeclarations: String {
+        let scalarTypes = ["Float", "Double", "Half"]
+        let vectorTypes = ["Float2", "Float3", "Float4"]
+        return (scalarTypes + vectorTypes).flatMap { type -> [String] in
+            var declarations = [String]()
+            for name in ["sqrt", "sin", "cos", "floor", "ceil", "abs"] {
+                declarations.append("public func \(name)(_ value: \(type)) -> \(type) { value }")
+            }
+            for name in ["pow", "min", "max"] {
+                declarations.append("public func \(name)(_ a: \(type), _ b: \(type)) -> \(type) { a }")
+            }
+            for name in ["clamp", "mix"] {
+                declarations.append("public func \(name)(_ a: \(type), _ b: \(type), _ c: \(type)) -> \(type) { a }")
+            }
+            if vectorTypes.contains(type) {
+                declarations.append("public func mix(_ a: \(type), _ b: \(type), _ t: Float) -> \(type) { a }")
+                declarations.append("public func dot(_ a: \(type), _ b: \(type)) -> Float { 0 }")
+            }
+            return declarations
+        }.joined(separator: "\n")
+    }
 
     /// Writes the prelude next to a copy of the shader so swiftc sees both files.
     /// `import SMetal` is stripped: the prelude is compiled into the same module.

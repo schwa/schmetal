@@ -110,3 +110,66 @@ private func withShader(_ source: String, body: (String) throws -> Void) throws 
         }
     }
 }
+
+@Test(arguments: ["Float", "Double", "Half", "Float2", "Float3", "Float4"])
+func `advertised floating point intrinsics compile to Metal`(type: String) throws {
+    let calls = [
+        "sqrt(value)", "sin(value)", "cos(value)", "floor(value)", "ceil(value)",
+        "pow(value, value)", "min(value, value)", "max(value, value)",
+        "abs(value)", "clamp(value, value, value)", "mix(value, value, weight)"
+    ]
+    let assignments = calls.map { "output[gid] = \($0)" }.joined(separator: "\n")
+    let weightType = type.hasPrefix("Float") && type != "Float" ? "Float" : type
+    try withShader("""
+    import SMetal
+    @compute
+    func math(input: Buffer<\(type)>, output: Buffer<\(type)>, weight: \(weightType), gid: GridIndex) {
+        let value = input[gid]
+        \(assignments)
+    }
+    """) { path in
+        var emitter = Emitter(ast: try TypedAST(path: path))
+        let metal = try emitter.emit()
+        for call in calls {
+            #expect(metal.contains(call))
+        }
+        let metalPath = path + ".metal"
+        try metal.write(toFile: metalPath, atomically: true, encoding: .utf8)
+        try MetalCompiler.compile(metalPath: metalPath, libraryPath: path + ".metallib")
+    }
+}
+
+@Test(arguments: ["Float2", "Float3", "Float4"])
+func `dot and vector weighted mix compile to Metal`(type: String) throws {
+    try withShader("""
+    import SMetal
+    @compute
+    func vectorMath(input: Buffer<\(type)>, output: Buffer<\(type)>, scalar: Buffer<Float>, gid: GridIndex) {
+        let value = input[gid]
+        scalar[gid] = dot(value, value)
+        output[gid] = mix(value, value, value)
+    }
+    """) { path in
+        var emitter = Emitter(ast: try TypedAST(path: path))
+        let metal = try emitter.emit()
+        #expect(metal.contains("dot(value, value)"))
+        #expect(metal.contains("mix(value, value, value)"))
+        let metalPath = path + ".metal"
+        try metal.write(toFile: metalPath, atomically: true, encoding: .utf8)
+        try MetalCompiler.compile(metalPath: metalPath, libraryPath: path + ".metallib")
+    }
+}
+
+@Test(arguments: ["sqrt(true)", "pow(value, true)", "dot(value, value)", "sin(value, value)"])
+func `math intrinsic invalid arguments are rejected`(expression: String) throws {
+    try withShader("""
+    import SMetal
+    @compute
+    func invalid(input: Buffer<Float>, output: Buffer<Float>, gid: GridIndex) {
+        let value = input[gid]
+        output[gid] = \(expression)
+    }
+    """) { path in
+        #expect(throws: SMetalError.self) { try TypedAST(path: path) }
+    }
+}
