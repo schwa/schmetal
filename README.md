@@ -69,6 +69,38 @@ are rejected during lowering. Helper overloads receive distinct internal Metal n
 Swift type errors retain source diagnostics. Valid Swift outside the supported shader
 subset receives a lowering error rather than being silently ignored.
 
+## Buffer bindings and uniforms
+
+Use `@buffer(slot)` on entry-point parameters to select explicit buffer slots:
+
+```swift
+struct Uniforms { var scale: Float; var offset: Float }
+
+@compute
+func transform(@buffer(0) input: Buffer<Float>,
+               @buffer(3) uniforms: Uniforms,
+               @buffer(5) output: Buffer<Float>,
+               gid: GridIndex) {
+    output[gid] = input[gid] * uniforms.scale + uniforms.offset
+}
+```
+
+- `Buffer<T>` lowers to a writable `device T*`.
+- Annotated scalars and structs lower to read-only `constant T&` arguments.
+- Unannotated structs remain `[[stage_in]]`; they do not consume a buffer slot.
+- Explicit slots are reserved first. Remaining resources take the lowest unused
+  slots in parameter order. With no annotations, existing numbering is unchanged.
+- Each entry point allocates its own slots. Duplicates within an entry point are errors.
+- Slot arguments must be nonnegative integer literals from 0 through 30.
+  Decimal, hexadecimal, octal, and binary spellings are supported; named constants
+  and expressions are not evaluated.
+- Helpers and built-in index parameters cannot carry `@buffer`.
+
+The annotation is a read-only Swift parameter property wrapper. Device-buffer
+elements remain writable through their nonmutating subscript setter.
+Host code must bind the specified slots and pack uniform bytes using the emitted
+Metal layout. For example, a `Float4` member requires 16-byte alignment.
+
 ## Type identity
 
 Compilation uses only `swiftc -frontend -dump-ast -dump-ast-format json`. Each source
@@ -96,13 +128,14 @@ Source locations use UTF-8 byte offsets, mapped back to the original shader path
 - `Sources/smetal/DemangledSymbol.swift` — canonical type and declaration-owner decoding
 - `Sources/smetal/LocalBindings.swift` — lexical local-reference resolution
 - `Sources/smetal/Emitter.swift` — typed AST → MSL
+- `Sources/smetal/BufferBindings.swift` — validated explicit and automatic slot allocation
 - `Sources/smetal/MetalCompiler.swift` — `.metal` → `.metallib`
 
 No external dependencies; everything needed is in the Xcode toolchain.
 
 ## How the attributes work
 
-Stage markers use global actors; member markers use property wrappers.
+Stage markers use global actors; member and buffer parameter markers use property wrappers.
 This avoids a macro plugin, but Swift applies the actors' and wrappers' semantics
 during type checking. Metal output contains neither actor isolation nor wrapper storage.
 
@@ -134,7 +167,7 @@ guarantee compatibility with other compiler versions or concurrency settings.
   The adapter and regression suite are tested with Apple Swift 6.4.
 - Prelude bodies are type-checking stubs, not executable reference implementations.
   Metal mappings remain explicit; the GPU tests cover selected operations, not every mapping.
-- No real checking of address spaces or binding indices: buffer numbering is assigned in
-  declaration order, not validated against a pipeline.
+- Host binding indices and data layout must match the generated Metal interface.
+  There is no host-side binding or layout generator.
 - Definite-initialization runs in SILGen, which `-dump-ast` stops short of, so
   `var out: VertexOut` with no initializer is accepted (and is what shaders want).

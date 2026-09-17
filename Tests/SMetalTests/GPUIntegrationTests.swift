@@ -51,12 +51,18 @@ private struct GPUHarness {
     }
 
     func dispatch(_ name: String, library: any MTLLibrary, buffers: [any MTLBuffer], count: Int) throws {
+        try dispatch(name, library: library, bindings: Dictionary(uniqueKeysWithValues: buffers.enumerated().map {
+            ($0.offset, $0.element)
+        }), count: count)
+    }
+
+    func dispatch(_ name: String, library: any MTLLibrary, bindings: [Int: any MTLBuffer], count: Int) throws {
         let function = try #require(library.makeFunction(name: name))
         let pipeline = try device.makeComputePipelineState(function: function)
         let command = try #require(queue.makeCommandBuffer())
         let encoder = try #require(command.makeComputeCommandEncoder())
         encoder.setComputePipelineState(pipeline)
-        for (index, buffer) in buffers.enumerated() {
+        for (index, buffer) in bindings {
             encoder.setBuffer(buffer, offset: 0, index: index)
         }
         encoder.dispatchThreads(
@@ -65,6 +71,40 @@ private struct GPUHarness {
         )
         encoder.endEncoding()
         try complete(command)
+    }
+
+    func renderTriangle(library: any MTLLibrary, width: Int, vertexBuffers: [Int: any MTLBuffer],
+                        fragmentBuffers: [Int: any MTLBuffer]) throws -> [UInt8] {
+        let descriptor = MTLRenderPipelineDescriptor()
+        descriptor.vertexFunction = try #require(library.makeFunction(name: "triangleVertex"))
+        descriptor.fragmentFunction = try #require(library.makeFunction(name: "triangleFragment"))
+        descriptor.colorAttachments[0].pixelFormat = .rgba8Unorm
+        let pipeline = try device.makeRenderPipelineState(descriptor: descriptor)
+        let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .rgba8Unorm, width: width, height: width, mipmapped: false
+        )
+        textureDescriptor.storageMode = .shared
+        textureDescriptor.usage = .renderTarget
+        let texture = try #require(device.makeTexture(descriptor: textureDescriptor))
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = texture
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].storeAction = .store
+        pass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 1, alpha: 1)
+        let command = try #require(queue.makeCommandBuffer())
+        let encoder = try #require(command.makeRenderCommandEncoder(descriptor: pass))
+        encoder.setRenderPipelineState(pipeline)
+        for (index, buffer) in vertexBuffers { encoder.setVertexBuffer(buffer, offset: 0, index: index) }
+        for (index, buffer) in fragmentBuffers { encoder.setFragmentBuffer(buffer, offset: 0, index: index) }
+        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+        encoder.endEncoding()
+        try complete(command)
+        var pixels = [UInt8](repeating: 0, count: width * width * 4)
+        try pixels.withUnsafeMutableBytes { bytes in
+            let base = try #require(bytes.baseAddress)
+            texture.getBytes(base, bytesPerRow: width * 4, from: MTLRegionMake2D(0, 0, width, width), mipmapLevel: 0)
+        }
+        return pixels
     }
 }
 
@@ -123,47 +163,97 @@ struct GPUIntegrationTests {
         }
     }
 
-    @Test func `vertex and fragment example render expected pixels`() throws {
+    @Test func `explicit and automatic bindings agree with host slots`() throws {
         let gpu = try GPUHarness()
-        let library = try gpu.library(example: "triangle")
-        let descriptor = MTLRenderPipelineDescriptor()
-        descriptor.vertexFunction = try #require(library.makeFunction(name: "triangleVertex"))
-        descriptor.fragmentFunction = try #require(library.makeFunction(name: "triangleFragment"))
-        descriptor.colorAttachments[0].pixelFormat = .rgba8Unorm
-        let pipeline = try gpu.device.makeRenderPipelineState(descriptor: descriptor)
+        let library = try gpu.library(source: """
+        import SMetal
+        @compute func bindSlots(automatic: Buffer<Float>, @buffer(0) pinned: Buffer<Float>,
+                                @buffer(3) scale: Float, output: Buffer<Float>, gid: GridIndex) {
+            output[gid] = automatic[gid] + pinned[gid] * scale
+        }
+        """, specializations: [:])
+        let values: [Float] = [1, 2, 3, 4]
+        let automatic = try gpu.buffer(values: values)
+        let pinned = try gpu.buffer(values: values.map { $0 + 10 })
+        let scale = try gpu.buffer(values: [Float(2)])
+        let output = try gpu.buffer(values: [Float](repeating: .nan, count: values.count))
+        try gpu.dispatch("bindSlots", library: library, bindings: [1: automatic, 0: pinned, 3: scale, 2: output],
+                         count: values.count)
+        let result = output.contents().assumingMemoryBound(to: Float.self)
+        for index in values.indices {
+            #expect(result[index] == values[index] + (values[index] + 10) * 2)
+        }
+    }
 
-        let width = 32
-        let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .rgba8Unorm, width: width, height: width, mipmapped: false
+    @Test func `uniform structs execute from sparse constant buffer slots`() throws {
+        let gpu = try GPUHarness()
+        let library = try gpu.library(source: """
+        import SMetal
+        struct Uniforms { var scale: Float; var offset: Float }
+        @compute func transform(@buffer(0) input: Buffer<Float>, @buffer(3) uniforms: Uniforms,
+                                @buffer(5) output: Buffer<Float>, gid: GridIndex) {
+            output[gid] = input[gid] * uniforms.scale + uniforms.offset + -1
+        }
+        """, specializations: [:])
+        let values: [Float] = [-2, 0, 1, 5]
+        let input = try gpu.buffer(values: values)
+        let uniforms = try gpu.buffer(values: [SIMD2<Float>(2, 3)])
+        let output = try gpu.buffer(values: [Float](repeating: .nan, count: values.count))
+        try gpu.dispatch(
+            "transform", library: library, bindings: [0: input, 3: uniforms, 5: output], count: values.count
         )
-        textureDescriptor.storageMode = .shared
-        textureDescriptor.usage = .renderTarget
-        let texture = try #require(gpu.device.makeTexture(descriptor: textureDescriptor))
+        let result = output.contents().assumingMemoryBound(to: Float.self)
+        for index in values.indices {
+            #expect(result[index] == values[index] * 2 + 2)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func `vertex and fragment example render expected pixels`(useUniforms: Bool) throws {
+        let gpu = try GPUHarness()
+        let library: any MTLLibrary
+        if useUniforms {
+            library = try gpu.library(source: """
+            import SMetal
+            struct VertexOut { @position var position: Float4 }
+            struct Uniforms { var scale: Float; var tint: Float4 }
+            @vertex func triangleVertex(vertexID: VertexIndex, @buffer(3) positions: Buffer<Float4>,
+                                        @buffer(4) uniforms: Uniforms) -> VertexOut {
+                var position = positions[vertexID]
+                position.x = position.x * uniforms.scale
+                return VertexOut(position: position)
+            }
+            @fragment func triangleFragment(input: VertexOut, @buffer(5) uniforms: Uniforms) -> Float4 {
+                return uniforms.tint
+            }
+            """, specializations: [:])
+        } else {
+            library = try gpu.library(example: "triangle")
+        }
+        let width = 32
         let positions = try gpu.buffer(values: [
             SIMD4<Float>(-1, -1, 0, 1), SIMD4<Float>(1, -1, 0, 1), SIMD4<Float>(0, 1, 0, 1)
         ])
         let colors = try gpu.buffer(values: [SIMD4<Float>](repeating: SIMD4(1, 0, 0, 1), count: 3))
-        let pass = MTLRenderPassDescriptor()
-        pass.colorAttachments[0].texture = texture
-        pass.colorAttachments[0].loadAction = .clear
-        pass.colorAttachments[0].storeAction = .store
-        pass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 1, alpha: 1)
-        let command = try #require(gpu.queue.makeCommandBuffer())
-        let encoder = try #require(command.makeRenderCommandEncoder(descriptor: pass))
-        encoder.setRenderPipelineState(pipeline)
-        encoder.setVertexBuffer(positions, offset: 0, index: 0)
-        encoder.setVertexBuffer(colors, offset: 0, index: 1)
-        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
-        encoder.endEncoding()
-        try gpu.complete(command)
-
-        var pixels = [UInt8](repeating: 0, count: width * width * 4)
-        try pixels.withUnsafeMutableBytes { bytes in
-            let base = try #require(bytes.baseAddress)
-            texture.getBytes(base, bytesPerRow: width * 4, from: MTLRegionMake2D(0, 0, width, width), mipmapLevel: 0)
+        var vertexBuffers: [Int: any MTLBuffer]
+        var fragmentBuffers: [Int: any MTLBuffer] = [:]
+        if useUniforms {
+            // Float4 alignment places tint at byte 16, after scale and padding.
+            let uniforms = try gpu.buffer(values: [SIMD4<Float>(0.5, 0, 0, 0), SIMD4<Float>(0, 1, 0, 1)])
+            vertexBuffers = [3: positions, 4: uniforms]
+            fragmentBuffers = [5: uniforms]
+        } else {
+            vertexBuffers = [0: positions, 1: colors]
         }
+        let pixels = try gpu.renderTriangle(
+            library: library, width: width, vertexBuffers: vertexBuffers, fragmentBuffers: fragmentBuffers
+        )
         let center = (16 * width + 16) * 4
-        #expect(Array(pixels[center..<(center + 4)]) == [255, 0, 0, 255])
+        let expectedCenter: [UInt8] = useUniforms ? [0, 255, 0, 255] : [255, 0, 0, 255]
+        #expect(Array(pixels[center..<(center + 4)]) == expectedCenter)
+        let side = (16 * width + 20) * 4
+        let expectedSide: [UInt8] = useUniforms ? [0, 0, 255, 255] : [255, 0, 0, 255]
+        #expect(Array(pixels[side..<(side + 4)]) == expectedSide)
         #expect(Array(pixels[0..<4]) == [0, 0, 255, 255])
     }
 }

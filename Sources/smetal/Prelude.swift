@@ -26,6 +26,11 @@ enum Prelude {
         public init(wrappedValue: T) { self.wrappedValue = wrappedValue }
     }
 
+    @propertyWrapper public struct buffer<Value> {
+        public let wrappedValue: Value
+        public init(wrappedValue: Value, _ index: Swift.Int) { self.wrappedValue = wrappedValue }
+    }
+
     public typealias Half = Swift.Float16
     public struct Float2 {
         public var x: Swift.Float, y: Swift.Float

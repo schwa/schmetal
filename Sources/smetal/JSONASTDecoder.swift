@@ -13,7 +13,7 @@ struct JSONASTDecoder {
         "enum_decl": ["attrs", "members"], "extension_decl": ["attrs", "members"],
         "func_decl": ["attrs", "params", "body"], "constructor_decl": ["attrs", "params", "body"],
         "accessor_decl": ["attrs", "params", "body"], "parameter_list": ["params"],
-        "parameter": ["attrs"], "var_decl": ["attrs", "accessors"],
+        "parameter": ["attrs"], "var_decl": ["attrs", "accessors"], "custom_attr": ["args"],
         "pattern_binding_decl": ["pattern_entries"], "pattern_entry": ["pattern", "processed_init"],
         "pattern_typed": ["sub_pattern"], "brace_stmt": ["elements"],
         "argument_list": ["args"], "argument": ["expr"], "assign_expr": ["dest", "src"],

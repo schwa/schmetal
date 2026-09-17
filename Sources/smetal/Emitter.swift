@@ -154,10 +154,17 @@ struct Emitter {
         }
         let isEntryPoint = qualifier != "static"
 
-        var parameters: [String] = []
-        var bufferIndex = 0
-        for parameter in node.firstChild(of: "parameter_list")?.children(of: "parameter") ?? [] {
-            parameters.append(try emitParameter(parameter, bufferIndex: &bufferIndex, isEntryPoint: isEntryPoint))
+        let parameterNodes = node.firstChild(of: "parameter_list")?.children(of: "parameter") ?? []
+        let nonBindable = Set(parameterNodes.filter { Self.indexAttributes[$0.type ?? ""] != nil }.compactMap(\.name))
+        let automaticResources = Set(parameterNodes.filter {
+            !nonBindable.contains($0.name ?? "") && structTypes[$0.type ?? ""] == nil
+        }.compactMap(\.name))
+        let bindings = try BufferBindings(
+            parameters: parameterNodes, automaticResources: automaticResources,
+            nonBindable: nonBindable, isEntryPoint: isEntryPoint
+        )
+        let parameters = try parameterNodes.map { parameter in
+            try emitParameter(parameter, bufferSlot: bindings.slots[parameter.name ?? ""], isEntryPoint: isEntryPoint)
         }
 
         guard let body = node.firstChild(of: "brace_stmt") else {
@@ -176,7 +183,7 @@ struct Emitter {
         return signature + " " + (try emitBlock(body, indent: 0)) + "\n"
     }
 
-    private func emitParameter(_ node: ASTNode, bufferIndex: inout Int, isEntryPoint: Bool) throws -> String {
+    private func emitParameter(_ node: ASTNode, bufferSlot: Int?, isEntryPoint: Bool) throws -> String {
         guard let name = node.name else { throw SMetalError("unnamed parameter") }
         guard let type = node.type else { throw SMetalError("parameter '\(name)' has no type") }
 
@@ -186,20 +193,23 @@ struct Emitter {
 
         if let element = bufferElement(of: type) {
             let elementType = try metalType(element, context: "Buffer element")
-            defer { bufferIndex += 1 }
-            let binding = isEntryPoint ? " [[buffer(\(bufferIndex))]]" : ""
+            guard !isEntryPoint || bufferSlot != nil else { throw SMetalError("missing buffer binding for '\(name)'") }
+            let binding = bufferSlot.map { " [[buffer(\($0))]]" } ?? ""
             return "device \(elementType) *\(name)\(binding)"
         }
 
         if let structure = structTypes[type] {
-            // A struct parameter on an entry point is rasterizer input.
+            if let bufferSlot {
+                return "constant \(structure) &\(name) [[buffer(\(bufferSlot))]]"
+            }
+            // Unannotated struct parameters on entry points are rasterizer inputs.
             return isEntryPoint ? "\(structure) \(name) [[stage_in]]" : "\(structure) \(name)"
         }
 
         let mapped = try metalType(type, context: "parameter '\(name)'")
         if isEntryPoint {
-            defer { bufferIndex += 1 }
-            return "constant \(mapped) &\(name) [[buffer(\(bufferIndex))]]"
+            guard let bufferSlot else { throw SMetalError("missing buffer binding for '\(name)'") }
+            return "constant \(mapped) &\(name) [[buffer(\(bufferSlot))]]"
         }
         return "\(mapped) \(name)"
     }
@@ -289,11 +299,11 @@ extension Emitter {
         switch node.kind {
         case "integer_literal_expr":
             guard let value = node["value"] else { throw SMetalError("integer literal without value") }
-            return value
+            return node["negative"] == "true" ? "-" + value : value
 
         case "float_literal_expr":
             guard let value = node["value"] else { throw SMetalError("float literal without value") }
-            return value
+            return node["negative"] == "true" ? "-" + value : value
 
         case "boolean_literal_expr":
             return node["value"] ?? "false"

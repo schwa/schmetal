@@ -110,17 +110,20 @@ Buffer subscripts accept any expression as the index. The stdlib declares subscr
 ## 7: No control over buffer binding indices
 
 +++
-status: open
+status: closed
 priority: medium
 kind: enhancement
 labels: effort:m, area:language
 created: 2026-09-17T00:41:30Z
-updated: 2026-09-17T15:16:14Z
+updated: 2026-09-17T18:18:00Z
+closed: 2026-09-17T18:18:00Z
 +++
 
 Buffer parameters are numbered sequentially in declaration order. There is no way to pin a parameter to a specific [[buffer(n)]] slot, so host code and shader order must be kept in sync by hand.
 
 - `2026-09-17T15:57:33Z`: Inspected Emitter.emitParameter, Prelude, README, and the GPU harness: bindings are assigned by parameter order, including scalar constant arguments; there is no existing explicit-slot syntax or metadata channel. Punting because implementing this feature requires a shader-language/API decision, not just emitter plumbing. Concrete unblocker: choose where slots are specified (shader-side parameter annotation versus per-entry-point build configuration), define whether unannotated parameters keep positional slots or take the lowest unused slot, and confirm duplicate/out-of-range slots should be errors. No regression test or source change added because there is no agreed input syntax to test.
+- `2026-09-17T18:13:48Z`: Implemented in the working copy, awaiting commit: @buffer(slot) parameter wrappers preserve slot arguments in JSON. BufferBindings reserves explicit slots before assigning the lowest unused slots to automatic resources. Slots are per entry point; duplicate slots, out-of-range values, named constants/expressions, helper annotations, built-in index annotations, unknown parameter markers, and resource-count overflow are rejected. Verified Metal itself limits buffer slots to 0...30. Decimal/hex/octal/binary literal forms and slot 30 compile. GPU readback verifies mixed explicit/automatic assignments. The negative-slot regression also exposed dropped JSON negative-literal flags in ordinary expressions; emission now retains the sign and has regression/GPU coverage. xcb build and all 52 tests pass; original examples still compile. No commit yet.
+- `2026-09-17T18:18:00Z`: Implemented and verified: explicit @buffer slots, deterministic automatic allocation, and read-only uniform struct bindings. Build and all 52 tests pass, including compute and render GPU checks. Closing with the implementation commit.
 
 ---
 
@@ -142,15 +145,19 @@ There is no texture or sampler type. Fragment shaders that sample an image canno
 ## 9: Uniform structs cannot be passed as constant buffers
 
 +++
-status: open
+status: closed
 priority: medium
 kind: feature
 labels: effort:m, area:lowering
 created: 2026-09-17T00:41:30Z
-updated: 2026-09-17T15:16:14Z
+updated: 2026-09-17T18:18:00Z
+closed: 2026-09-17T18:18:00Z
 +++
 
 A struct parameter on an entry point always lowers to [[stage_in]]. A struct of uniforms (e.g. a transform matrix) has no way to be bound as a constant buffer argument.
+
+- `2026-09-17T18:13:48Z`: Implemented in the working copy, awaiting commit: @buffer(slot) on a struct parameter emits a read-only constant Struct& [[buffer(slot)]]. Unannotated structs keep [[stage_in]]. The parameter wrapper has a let wrappedValue, so writes to uniform fields fail Swift checking while Buffer element writes remain valid. Red tests reproduced missing uniform lowering before the change. Metal compilation tests cover compute uniforms and fragment stage_in plus uniforms. GPU tests verify sparse slots 0/3/5, vertex uniforms changing geometry, fragment uniforms changing color, and padded Float4 layout. README documents binding rules and host responsibility for matching Metal layout. xcb build and all 52 tests pass. No commit yet.
+- `2026-09-17T18:18:00Z`: Implemented and verified: explicit @buffer slots, deterministic automatic allocation, and read-only uniform struct bindings. Build and all 52 tests pass, including compute and render GPU checks. Closing with the implementation commit.
 
 ---
 
