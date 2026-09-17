@@ -120,6 +120,8 @@ updated: 2026-09-17T15:16:14Z
 
 Buffer parameters are numbered sequentially in declaration order. There is no way to pin a parameter to a specific [[buffer(n)]] slot, so host code and shader order must be kept in sync by hand.
 
+- `2026-09-17T15:57:33Z`: Inspected Emitter.emitParameter, Prelude, README, and the GPU harness: bindings are assigned by parameter order, including scalar constant arguments; there is no existing explicit-slot syntax or metadata channel. Punting because implementing this feature requires a shader-language/API decision, not just emitter plumbing. Concrete unblocker: choose where slots are specified (shader-side parameter annotation versus per-entry-point build configuration), define whether unannotated parameters keep positional slots or take the lowest unused slot, and confirm duplicate/out-of-range slots should be errors. No regression test or source change added because there is no agreed input syntax to test.
+
 ---
 
 ## 8: Textures and samplers are not supported
@@ -279,6 +281,7 @@ Prelude.swift declares shader types, while Metal spellings, pointer rules, and e
 
 - `2026-09-17T15:16:26Z`: Related: #16 covers canonical type lowering and #20 covers declaration-aware call/operator lowering.
 - `2026-09-17T15:19:12Z`: Related design task #25 explores ownership of the full shader-language contract; this issue retains the specific prelude/lowering metadata drift scope.
+- `2026-09-17T15:58:05Z`: Reviewed Prelude.source/mathDeclarations, Emitter type/binding tables, ShaderDeclarations provenance checks, and related #25. Punting: #25 explicitly leaves the ownership interface and metadata mechanism unselected; moving dictionaries beside Prelude would not resolve independent definitions or consistency. Concrete unblocker: approve either a declarative shader-language registry that generates Swift declarations and Metal mappings, or declaration-attached metadata consumed by lowering, and specify whether this applies only to types or also intrinsics/stages/member markers. No source changes or tests added; this is a design decision rather than a reproduced runtime bug.
 
 ---
 
