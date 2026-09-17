@@ -1,0 +1,7 @@
+.build/
+.swiftpm/
+.DS_Store
+.xcb-cache.json
+*.metal
+*.air
+*.metallib

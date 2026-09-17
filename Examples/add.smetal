@@ -1,0 +1,18 @@
+// A .smetal shader: Swift syntax, Metal semantics.
+
+let scale: Float = 2.0
+
+@compute
+func addArrays(a: Buffer<Float>, b: Buffer<Float>, out: Buffer<Float>, gid: GridIndex) {
+    let sum: Float = a[gid] * scale + b[gid]
+    out[gid] = sum
+}
+
+@compute
+func clampArray(input: Buffer<Float>, out: Buffer<Float>, gid: GridIndex) {
+    var value: Float = input[gid]
+    if value > scale {
+        value = scale
+    }
+    out[gid] = value
+}
