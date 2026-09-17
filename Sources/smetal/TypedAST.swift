@@ -54,10 +54,15 @@ struct TypedAST {
         let staged = try Prelude.stage(shaderPath: path)
         defer { try? FileManager.default.removeItem(at: staged.directory) }
 
-        let dump = try SwiftFrontend.dumpAST(
-            files: [staged.prelude.path, staged.shader.path],
-            shaderName: staged.shader.lastPathComponent
-        )
+        let dump: SwiftFrontend.Dump
+        do {
+            dump = try SwiftFrontend.dumpAST(
+                files: [staged.prelude.path, staged.shader.path],
+                shaderName: staged.shader.lastPathComponent
+            )
+        } catch let error as SMetalError {
+            throw SMetalError(error.description.replacing(staged.shader.path, with: path))
+        }
 
         if !dump.diagnostics.isEmpty {
             let report = dump.diagnostics
@@ -129,18 +134,11 @@ enum SwiftFrontend {
     }
 
     private static func run(_ tool: String, _ arguments: [String]) throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["xcrun", tool] + arguments
-        let errors = Pipe()
-        let output = Pipe()
-        process.standardError = errors
-        process.standardOutput = output
-        try process.run()
-        let errorData = errors.fileHandleForReading.readDataToEndOfFile()
-        _ = output.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return String(decoding: errorData, as: UTF8.self)
+        let output = try ToolProcess.run(
+            executable: URL(fileURLWithPath: "/usr/bin/xcrun"),
+            arguments: [tool] + arguments
+        )
+        return output.standardOutput + "\n" + output.standardError
     }
 }
 

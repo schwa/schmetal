@@ -301,17 +301,19 @@ The handwritten swiftc text-dump parser lacks focused coverage for quoting, esca
 ## 19: Frontend failures and subprocess output are not handled safely
 
 +++
-status: open
+status: closed
 priority: high
 kind: bug
 labels: effort:m, area:frontend
 created: 2026-09-17T15:12:14Z
-updated: 2026-09-17T15:16:14Z
+updated: 2026-09-17T15:29:42Z
+closed: 2026-09-17T15:29:42Z
 +++
 
 SwiftFrontend.run ignores the swiftc exit status and reads stderr and stdout sequentially. Failures without a recognized file:line:column diagnostic can lose their cause or leave partial AST data available for lowering. Sequential pipe draining can deadlock if stdout fills while stderr is being read; this risk has not been reproduced. Expected: failed frontend invocations cannot produce successful shader output, diagnostics retain their context, and both streams can drain safely.
 
 - `2026-09-17T15:19:12Z`: Related design task #26 explores compilation lifecycle ownership. Subprocess failure handling remains an independent fix here.
+- `2026-09-17T15:29:42Z`: Fixed frontend subprocess handling: stdout/stderr captured separately in temporary files, nonzero exits and signals rejected before AST parsing, full failure output retained with shader path remapping. Regression test failed before the fix because dumpAST accepted a missing input file; now passes. Added large dual-stream output, signal, launch failure, status/output preservation, and nonstrict diagnostic-context tests. xcb build and full xcb test pass; new process files pass SwiftLint.
 
 ---
 

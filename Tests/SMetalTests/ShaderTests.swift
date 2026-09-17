@@ -86,3 +86,27 @@ private func withShader(_ source: String, body: (String) throws -> Void) throws 
         #expect(throws: SMetalError.self) { try TypedAST(path: path) }
     }
 }
+
+@Test func `frontend rejects driver failures without source locations`() throws {
+    let missing = "/tmp/smetal-missing-\(UUID().uuidString).swift"
+    do {
+        _ = try SwiftFrontend.dumpAST(files: [missing], shaderName: "missing.swift")
+        Issue.record("Frontend accepted a failed compiler invocation")
+    } catch let error as SMetalError {
+        #expect(error.description.contains(missing))
+        #expect(error.description.contains("error:"))
+    }
+}
+
+@Test func `frontend failure keeps source context even in nonstrict mode`() throws {
+    try withShader("import SMetal\nfunc bad(value: MissingType) {}") { path in
+        do {
+            _ = try TypedAST(path: path, strict: false)
+            Issue.record("Accepted a failed type check in nonstrict mode")
+        } catch let error as SMetalError {
+            #expect(error.description.contains("\(path):2:"))
+            #expect(error.description.contains("MissingType"))
+            #expect(error.description.contains("func bad(value: MissingType) {}"))
+        }
+    }
+}
