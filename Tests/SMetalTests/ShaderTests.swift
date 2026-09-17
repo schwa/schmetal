@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import smetal
 
-private func withShader(_ source: String, body: (String) throws -> Void) throws {
+func withShader(_ source: String, body: (String) throws -> Void) throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }
