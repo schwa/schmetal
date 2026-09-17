@@ -257,3 +257,109 @@ func `unsupported declarations and callees are rejected before Metal emission`(s
         try MetalCompiler.compile(metalPath: metalPath, libraryPath: path + ".metallib")
     }
 }
+
+@Test(arguments: [
+    "let flag = value > 0 && value < 10; output[gid] = flag ? value : 0",
+    "let flag = value < 0 || value > 10; output[gid] = !flag ? value : -value",
+    """
+    var count: Int = 0
+    var result = value
+    while count < 3 { result = result + 1; count = count + 1 }
+    output[gid] = result
+    """,
+    "if value < 0 { output[gid] = -value } else if value > 10 { output[gid] = 10 } else { output[gid] = (value + 1) }",
+    "let flag: Bool = true; output[gid] = flag ? +value : 0"
+])
+func `control flow and scalar expressions compile to Metal`(body: String) throws {
+    try withShader("""
+    import SMetal
+    @compute
+    func expressions(input: Buffer<Float>, output: Buffer<Float>, gid: GridIndex) {
+        let value = input[gid]
+        \(body)
+    }
+    """) { path in
+        var emitter = Emitter(ast: try TypedAST(path: path))
+        let metal = try emitter.emit()
+        for marker in ["&&", "||", "?", "while", "else"] where body.contains(marker) {
+            #expect(metal.contains(marker))
+        }
+        let metalPath = path + ".metal"
+        try metal.write(toFile: metalPath, atomically: true, encoding: .utf8)
+        try MetalCompiler.compile(metalPath: metalPath, libraryPath: path + ".metallib")
+    }
+}
+
+@Test func `all advertised member attributes compile in stage structs`() throws {
+    try withShader("""
+    import SMetal
+    struct Vertex {
+        @position var position: Float4
+        @pointSize var size: Float
+        @flat var identifier: UInt32
+        var tint: Float4
+    }
+    struct Fragment {
+        @color var first: Float4
+        @color var second: Float4
+    }
+    @vertex
+    func vertexMain(id: VertexIndex, positions: Buffer<Float4>) -> Vertex {
+        var result: Vertex
+        result.position = positions[id]
+        result.size = 1
+        result.identifier = 0
+        result.tint = Float4(1, 0, 0, 1)
+        return result
+    }
+    @fragment
+    func fragmentMain(input: Vertex) -> Fragment {
+        var result: Fragment
+        result.first = input.tint
+        result.second = input.tint
+        return result
+    }
+    """) { path in
+        var emitter = Emitter(ast: try TypedAST(path: path))
+        let metal = try emitter.emit()
+        for attribute in ["position", "point_size", "flat", "color(0)", "color(1)"] {
+            #expect(metal.contains("[[\(attribute)]]"))
+        }
+        let metalPath = path + ".metal"
+        try metal.write(toFile: metalPath, atomically: true, encoding: .utf8)
+        try MetalCompiler.compile(metalPath: metalPath, libraryPath: path + ".metallib")
+    }
+}
+
+@Test(arguments: [
+    "func bad(values: Buffer<Float>) -> Float { values[1.5] }",
+    "func bad(value: Float4) -> Float { value.q }",
+    "func bad() -> Float4 { Float4(1, 2) }",
+    "func bad(value: Float) -> Float { value ? 1 : 0 }",
+    "func bad(value: Float) -> Bool { value && true }",
+    "struct Bad { @unknown var value: Float }"
+])
+func `invalid shader language constructs fail type checking`(source: String) throws {
+    try withShader("import SMetal\n" + source) { path in
+        #expect(throws: SMetalError.self) { try TypedAST(path: path) }
+    }
+}
+
+@Test(arguments: [
+    ("Float", "Float(2)"), ("Int", "Int(2.0)"), ("UInt", "UInt(2)"),
+    ("Half", "Half(2)"), ("Float2", "Float2(1, 2)"), ("Float3", "Float3(1, 2, 3)"),
+    ("UInt2", "UInt2(1, 2)"), ("UInt3", "UInt3(1, 2, 3)")
+])
+func `advertised scalar and vector constructors compile`(type: String, expression: String) throws {
+    try withShader("""
+    import SMetal
+    @compute
+    func construct(output: Buffer<\(type)>, gid: GridIndex) { output[gid] = \(expression) }
+    """) { path in
+        var emitter = Emitter(ast: try TypedAST(path: path))
+        let metal = try emitter.emit()
+        let metalPath = path + ".metal"
+        try metal.write(toFile: metalPath, atomically: true, encoding: .utf8)
+        try MetalCompiler.compile(metalPath: metalPath, libraryPath: path + ".metallib")
+    }
+}

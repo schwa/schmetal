@@ -332,7 +332,7 @@ extension Emitter {
             guard let inner = node.children.first else { return "()" }
             return "(\(try emitExpression(inner)))"
 
-        case "if_expr":
+        case "ternary_expr":
             let parts = node.children
             guard parts.count == 3 else { throw SMetalError("malformed ternary") }
             return "(\(try emitExpression(parts[0])) ? \(try emitExpression(parts[1])) : \(try emitExpression(parts[2])))"
@@ -367,7 +367,17 @@ extension Emitter {
         guard let arguments = node.firstChild(of: "argument_list") else {
             throw SMetalError("operator '\(operatorName)' has no arguments")
         }
-        let operands = try arguments.children(of: "argument").compactMap(\.children.first).map { try emitExpression($0) }
+        let argumentNodes = arguments.children(of: "argument").compactMap(\.children.first)
+        let operands = try argumentNodes.enumerated().map { index, operand in
+            if index == 1, ["&&", "||"].contains(operatorName), operand.kind == "autoclosure_expr" {
+                guard operand.children.count == 2, operand.children[0].kind == "parameter_list",
+                      operand.children[0].children.isEmpty, operand.children[1].type == "Bool" else {
+                    throw SMetalError("unsupported Boolean autoclosure")
+                }
+                return try emitExpression(operand.children[1])
+            }
+            return try emitExpression(operand)
+        }
         guard operands.count == 2 else {
             throw SMetalError("operator '\(operatorName)' expects two operands")
         }

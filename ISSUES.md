@@ -342,18 +342,20 @@ Emitter dispatches operators and intrinsics by short declaration names, and emit
 ## 21: Typed AST migration lacks regression coverage for advertised language features
 
 +++
-status: open
+status: closed
 priority: high
 kind: task
 labels: effort:l, area:testing
 created: 2026-09-17T15:12:14Z
-updated: 2026-09-17T15:16:14Z
+updated: 2026-09-17T15:57:03Z
+closed: 2026-09-17T15:57:03Z
 +++
 
 The current tests cover vector buffer access, two type errors, local inference, and constant specialization. Advertised constructors, intrinsics, helper calls, loops, boolean operators, ternaries, and member attributes lack systematic regression coverage. Passing the two examples does not establish compatibility across the previous language surface. Expected: representative accepted and rejected cases, with generated Metal compilation where applicable.
 
 - `2026-09-17T15:16:26Z`: Related: #3 provides runtime GPU checks; #18 covers parser-format tests; #23 covers missing advertised math declarations. Keep these scopes separate.
 - `2026-09-17T15:19:12Z`: Related design task #26 explores a compilation boundary for testing. The advertised-language regression coverage remains scoped here.
+- `2026-09-17T15:57:03Z`: Extended existing shader tests with valid control flow (while, if/else-if/else), Boolean &&/||/!, ternaries, unary +/- and parentheses, scalar/vector constructors, every member marker (position, pointSize, flat, multiple color outputs), and rejected indexing/member/constructor/Boolean/attribute cases. Existing intrinsic, helper-overload, and GPU coverage remains in place. Red runs found unsupported autoclosure_expr and ternary_expr, unary + protocol provenance, and Int constructor provenance; targeted lowering fixes now pass. Boolean autoclosures unwrap only the validated short-circuit RHS shape, preserving Metal &&/|| evaluation. All valid fixtures compile generated Metal; all 24 tests including GPU cases pass, as does xcb build. Changed tests and declaration validator pass SwiftLint. Marker name collision evidence was recorded on #22.
 
 ---
 
@@ -371,6 +373,7 @@ updated: 2026-09-17T15:16:14Z
 Stage markers are implemented as global actors and member markers as property wrappers. swiftc applies their ordinary Swift semantics during type checking even though the Metal emitter discards their implementation. Cross-stage calls, helper isolation, property initialization, and synthesized memberwise constructors have not been audited. Expected: documented and tested effects on which shader programs are accepted or rejected; do not assume these markers are semantically inert.
 
 - `2026-09-17T15:19:12Z`: Related design task #25 covers shader-language ownership. Actor and wrapper semantic validation remains scoped here.
+- `2026-09-17T15:57:03Z`: During #21 coverage work, a fixture declaring functions literally named vertex and fragment failed swiftc with invalid redeclaration of vertex/fragment because the prelude declares global actors with those names. Renaming the fixture functions to vertexMain/fragmentMain allowed all member-attribute compilation tests to pass. Include this verified name collision in the marker-semantics audit.
 
 ---
 

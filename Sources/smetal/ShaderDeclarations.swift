@@ -99,6 +99,11 @@ struct ShaderDeclarations {
         }) {
             return
         }
+        if name == "+", identity == "Swift.(file).AdditiveArithmetic extension.+",
+           let substitutions = reference["decl"]?.components(separatedBy: "Self -> ").last,
+           scalars.contains(String(substitutions.prefix { $0 != ")" })) {
+            return
+        }
         let comparisons = ["<", ">", "<=", ">=", "==", "!="]
         let protocols = ["Comparable", "Equatable"]
         if comparisons.contains(name),
@@ -123,7 +128,9 @@ struct ShaderDeclarations {
             return
         }
         let scalar = typeName == "Half" ? "Float16" : typeName
-        if !shaderStruct, identity.hasPrefix("Swift.(file).\(scalar) extension.init(") {
+        let swiftConstructor = identity.hasPrefix("Swift.(file).\(scalar) extension.init(")
+            || identity.hasPrefix("Swift.(file).\(scalar).init(")
+        if !shaderStruct, swiftConstructor {
             return
         }
         throw SMetalError("unsupported constructor declaration: \(identity)")
