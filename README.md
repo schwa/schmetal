@@ -22,6 +22,13 @@ xcb run -- build Examples/add.smetal --emit-metal # stop after .metal
 xcb run -- dump  Examples/add.smetal              # print the msf AST
 ```
 
+## Tests
+
+Run `xcb test`. GPU integration tests compile the example shaders, load their
+libraries, and check compute-buffer results and offscreen rendered pixels.
+They require a Metal device and the Xcode Metal compiler; missing hardware fails
+explicitly. Tests use temporary files and do not modify example artifacts.
+
 ## Language subset
 
 ```swift

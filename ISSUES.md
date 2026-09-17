@@ -37,17 +37,19 @@ Shader vectors use Float2/Float3/Float4/UInt2/UInt3 rather than standard Swift S
 ## 3: No end-to-end harness runs compiled shaders on the GPU
 
 +++
-status: open
+status: closed
 priority: high
 kind: feature
 labels: effort:l, area:testing
 created: 2026-09-17T00:41:30Z
-updated: 2026-09-17T15:16:14Z
+updated: 2026-09-17T15:51:41Z
+closed: 2026-09-17T15:51:41Z
 +++
 
 Tests only check emitted text and that metallib files exist. Nothing loads the metallib with MTLDevice, dispatches a kernel or draws with the vertex/fragment pair, and checks results, so a shader that compiles but computes the wrong values is not caught.
 
 - `2026-09-17T15:16:26Z`: Related to #21: this issue checks GPU results; #21 checks frontend acceptance, emission, and Metal compilation.
+- `2026-09-17T15:51:41Z`: Added a Metal GPU integration harness compiling real example sources in temporary directories. Compute tests dispatch addArrays and clampArray over 257 elements, check every result, and cover default scale 2 and specialization 8. Offscreen rendering runs triangleVertex/triangleFragment and checks red interior plus blue cleared exterior pixels. Command completion/errors are checked; missing Metal hardware fails explicitly. Test-only change: no production behavior changed. Validated the oracle by temporarily replacing addition with subtraction in staged source: GPU assertions failed (840 issues), then passed after removing the mutation. xcb build, all 20 tests, and new-file lint pass on this machine. README records hardware/toolchain requirements.
 
 ---
 
