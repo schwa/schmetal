@@ -35,6 +35,8 @@ updated: 2026-09-17T15:16:14Z
 
 Shader vectors use Float2/Float3/Float4/UInt2/UInt3 rather than standard Swift SIMD types such as SIMD4<Float>. The prelude declares custom vector structs and the emitter recognizes their names, but generic SIMD types are not supported end to end.
 
+- `2026-09-18T13:28:06Z`: Related: #30 wants builtin positions to be standard values with attribute markers, which depends on this issue landing SIMD types first.
+
 ---
 
 ## 3: No end-to-end harness runs compiled shaders on the GPU
@@ -589,5 +591,79 @@ Actual: silent narrowing to 32-bit.
 There is also no supported spelling for a 64-bit integer: `Int64` and `UInt64` are not in the shader vocabulary at all.
 
 Related: #27 (Double demoted to float) and #28 (literal defaulting) are the same problem in the floating-point domain.
+
+---
+
+## 30: Builtin positions use bespoke index types instead of attribute markers on standard values
+
++++
+status: new
+priority: medium
+kind: enhancement
+labels: area:language, effort:m
+depends: 2
+created: 2026-09-18T13:28:01Z
++++
+
+`GridIndex`, `VertexIndex`, and `InstanceIndex` are custom types whose only job is to name which Metal entry-point attribute a parameter binds to. The value they carry is an integer, reachable through `.raw`.
+
+Consequences:
+- Every additional builtin needs a new type. Metal has many (`threadgroup_position_in_grid`, `thread_position_in_threadgroup`, `thread_index_in_threadgroup`, `threads_per_threadgroup`, and more), none of which are supported.
+- The types are scalar, so only 1D dispatch is expressible. There is no way to write a 2D or 3D thread position.
+- Arithmetic requires unwrapping through `.raw`, unlike the standard integer types it shadows.
+
+Stage markers (`@compute`) and struct member markers (`@position`, `@flat`) already use property wrappers to attach Metal attributes to ordinary declarations; entry-point builtins do not follow that pattern.
+
+Expected: a builtin position is an ordinary integer or vector value carrying an attribute marker.
+Actual: it is a distinct nominal type per builtin, scalar only.
+
+Depends on #2: the value type should be a standard SIMD type rather than another bespoke vector struct.
+
+---
+
+## 31: Multidimensional dispatch is not expressible
+
++++
+status: new
+priority: medium
+kind: feature
+labels: area:language, effort:m
+depends: 30
+created: 2026-09-18T13:28:06Z
++++
+
+Shaders can only describe 1D compute dispatch. `GridIndex` lowers to a scalar `uint [[thread_position_in_grid]]`, so a kernel cannot receive a 2D or 3D thread position, and `Buffer` subscripts take a single linear index.
+
+Examples/mandelbrot.schmetal works around this by taking a `width` uniform and computing row and column from the linear index by hand.
+
+Expected: a kernel can declare a 2D or 3D thread position and threadgroup geometry.
+Actual: only a scalar linear index is available.
+
+---
+
+## 32: Address space is inferred from the parameter type and cannot be stated
+
++++
+status: new
+priority: medium
+kind: feature
+labels: area:language, effort:m
+created: 2026-09-18T13:44:03Z
++++
+
+A shader cannot say which Metal address space a parameter uses. The emitter derives it from the Swift type:
+
+- `Buffer<T>` becomes `device T*`, always writable.
+- A struct or scalar with `@buffer(n)` becomes `constant T&`, always read-only.
+
+`@buffer(n)` only selects a slot; it carries no address space information.
+
+Consequences:
+- A read-only array must still be declared `device`. There is no `constant T*`, which is the usual way to pass vertex data and lookup tables.
+- A writable single value cannot be expressed. There is no `device T&`.
+- `threadgroup` and `ray_data` are not reachable at all, so threadgroup memory and intersection payloads cannot be written.
+
+Expected: the address space is part of what a parameter declares.
+Actual: it is a fixed consequence of the parameter type.
 
 ---

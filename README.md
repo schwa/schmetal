@@ -1,204 +1,151 @@
 # schmetal
 
-Proof of concept: a shading language written in Swift syntax (`.schmetal`), type-checked by
-`swiftc` itself, translated to specialized `.metal` source, and compiled to `.metallib`
-with `xcrun metal` / `metallib`.
+Write Metal shaders in Swift syntax. `swiftc` type-checks them, then schmetal translates
+them to `.metal` and compiles a `.metallib`.
 
+A silly proof of concept, held together with tape. Do not ship it. See [Status](#status).
+
+## Example
+
+```swift
+import MetalStdlib
+
+struct Uniforms {
+    var lightDirection: Float3
+    var lightColor: Float3
+    var ambient: Float
+    var shininess: Float
+}
+
+struct Vertex {
+    var position: Float4
+    var normal: Float3
+    var tint: Float3
+}
+
+struct Fragment {
+    @position var position: Float4
+    var normal: Float3
+    var tint: Float3
+    @flat var materialID: UInt32
+}
+
+func saturate(value: Float) -> Float {
+    return clamp(value, 0.0, 1.0)
+}
+
+@vertex
+func litVertex(@buffer(0) vertices: Buffer<Vertex>, vertexID: VertexIndex) -> Fragment {
+    let source: Vertex = vertices[vertexID]
+    var out: Fragment
+    out.position = source.position
+    out.normal = source.normal
+    out.tint = source.tint
+    out.materialID = 0
+    return out
+}
+
+@fragment
+func litFragment(input: Fragment, @buffer(0) uniforms: Uniforms) -> Float4 {
+    let diffuse: Float = saturate(value: dot(input.normal, uniforms.lightDirection))
+    let specular: Float = pow(diffuse, uniforms.shininess)
+    let intensity: Float = saturate(value: uniforms.ambient + diffuse + specular)
+    let lit: Float3 = Float3(
+        input.tint.x * uniforms.lightColor.x * intensity,
+        input.tint.y * uniforms.lightColor.y * intensity,
+        input.tint.z * uniforms.lightColor.z * intensity
+    )
+    return Float4(lit.x, lit.y, lit.z, 1.0)
+}
 ```
-.schmetal --swiftc JSON AST--> canonical nodes --emitter--> .metal --metal--> .air --metallib--> .metallib
-```
-
-The shader is compiled as ordinary Swift against a generated prelude, so name resolution,
-overload selection, and type inference are the real Swift implementations rather than an
-approximation of them.
-
-## Package layout
-
-- `Schmetal` library — the compiler. `ShaderCompiler` owns the whole lifecycle
-  (prelude staging, Swift frontend, lowering, Metal toolchain):
-
-  ```swift
-  let result = try ShaderCompiler(specializations: ["scale": "8.0"])
-      .compile(shaderPath: "Examples/add.schmetal")
-  print(result.libraryPath!)
-  ```
-
-- `schmetal` executable — argument parsing and printing only.
-
-## Use
 
 ```fish
-xcb build
-xcb run -- build Examples/add.schmetal              # → Examples/Generated/add.metal + .metallib
-xcb run -- build Examples/add.schmetal -D scale=8.0 # specialize a global constant
-xcb run -- build Examples/add.schmetal --emit-metal # stop after .metal
-xcb run -- dump Examples/add.schmetal              # print the normalized typed AST
+xcb run -- build Examples/lighting.schmetal
 ```
 
-Generated `.metal` and `.metallib` files go to a `Generated/` subdirectory beside
-the shader, unless `-o` names a library path.
-`Examples/Images` holds rendered output; regenerate it with
-`SCHMETAL_TEST_IMAGES=Examples/Images xcb test`.
+which generates this Metal Shading Language (.metal) code:
 
-Examples: `add` (compute plus specialization), `triangle` (vertex/fragment),
-`mandelbrot` (uniform struct, helper function, `while` loop), and `lighting`
-(shared uniforms, `@flat` stage-in member, instanced vertex fetch).
+```c
+#include <metal_stdlib>
+using namespace metal;
 
-## Tests
+struct schmetal_type_0 {
+    float3 lightDirection;
+    float3 lightColor;
+    float ambient;
+    float shininess;
+};
 
-Run `xcb test`. GPU integration tests compile the example shaders, load their
-libraries, and check compute-buffer results and offscreen rendered pixels.
-They require a Metal device and the Xcode Metal compiler; missing hardware fails
-explicitly. Tests use temporary files and do not modify example artifacts.
+struct schmetal_type_1 {
+    float4 position;
+    float3 normal;
+    float3 tint;
+};
 
-## Language subset
+struct schmetal_type_2 {
+    float4 position [[position]];
+    float3 normal;
+    float3 tint;
+    uint materialID [[flat]];
+};
 
-```swift
-let scale: Float = 2.0            // → constant float scale = 2.0;  (override with -D)
+static float schmetal_helper_0(float value);
 
-@compute                          // @compute / @vertex / @fragment; no attribute = helper
-func addArrays(a: Buffer<Float>,  // → device float *a [[buffer(0)]]
-               b: Buffer<Float>,
-               out: Buffer<Float>,
-               gid: GridIndex) {  // → uint gid [[thread_position_in_grid]]
-    let sum = a[gid] * scale + b[gid]  // type inferred
-    out[gid] = sum
+static float schmetal_helper_0(float value) {
+    return clamp(value, 0.0, 1.0);
+}
+
+vertex schmetal_type_2 litVertex(
+    device schmetal_type_1 *vertices [[buffer(0)]],
+    uint vertexID [[vertex_id]]
+) {
+    schmetal_type_1 source = vertices[vertexID];
+    schmetal_type_2 out;
+    out.position = source.position;
+    out.normal = source.normal;
+    out.tint = source.tint;
+    out.materialID = 0;
+    return out;
+}
+
+fragment float4 litFragment(
+    schmetal_type_2 input [[stage_in]],
+    constant schmetal_type_0 &uniforms [[buffer(0)]]
+) {
+    float diffuse = schmetal_helper_0(dot(input.normal, uniforms.lightDirection));
+    float specular = pow(diffuse, uniforms.shininess);
+    float intensity = schmetal_helper_0(((uniforms.ambient + diffuse) + specular));
+    float3 lit = float3(
+        ((input.tint.x * uniforms.lightColor.x) * intensity),
+        ((input.tint.y * uniforms.lightColor.y) * intensity),
+        ((input.tint.z * uniforms.lightColor.z) * intensity)
+    );
+    return float4(lit.x, lit.y, lit.z, 1.0);
 }
 ```
 
-Supported: `let`/`var` with or without annotations, assignment, `if`/`else`, `while`,
-`return`, literals, binary/unary/ternary/paren expressions, subscripts, member access,
-struct declarations and initializers, calls to helper functions in the same file, and a
-fixed set of Metal intrinsics (`min`, `max`, `abs`, `sqrt`, `sin`, `cos`, `pow`, `clamp`,
-`floor`, `ceil`, `mix`, `dot`, plus scalar/vector conversions).
+Rendered with three vertex tints and a light pointing at the triangle:
 
-Math overloads: `sqrt`, `sin`, `cos`, `floor`, `ceil`, `abs`, `pow`, `min`, `max`,
-`clamp`, and `mix` accept `Float`, `Double`, `Half`, and `Float2/3/4`. Arguments
-have matching types; vector `mix` also accepts a scalar `Float` weight.
-`dot` accepts matching `Float2/3/4` arguments and returns `Float`.
-`Double` lowers to Metal `float`, not double precision.
+![Lit triangle rendered by the lighting example](Examples/Images/lighting-large.png)
 
-Types: `Float`, `Double`, `Int`, `Int32`, `UInt`, `UInt32`, `Bool`, `Half`,
-`Float2/3/4`, `UInt2/3`, `Buffer<T>`, `GridIndex`, `VertexIndex`, `InstanceIndex`.
-Index types expose `.raw` as a `UInt32` for arithmetic; it costs nothing in Metal
-because the parameter is already a `uint`.
+- `@vertex` and `@fragment` mark entry points. They become `vertex` and `fragment`
+  qualifiers in Metal. A function with no marker is a helper, and gets an internal name.
+- `@buffer(0)` picks an explicit buffer slot. `Buffer<T>` becomes a writable
+  `device T*`, and a plain struct becomes a read-only `constant T&`.
+- `Fragment` is a stage-in struct. `@position` and `@flat` become the matching MSL member
+  attributes, and the unmarked members interpolate.
+- `VertexIndex` carries `[[vertex_id]]`. It is a type rather than an attribute, which is a
+  design wart.
+- `saturate` and `dot` resolve through real Swift overload resolution, against a prelude
+  generated from the supported vocabulary. Structs and helpers get internal names
+  (`schmetal_type_0`, `schmetal_helper_0`) so shadowing and overloads survive lowering.
+- Every float needs an explicit `Float` annotation, because a bare literal infers `Double`.
 
-`Sources/schmetal/ShaderLanguage.swift` owns this vocabulary. The prelude's
-vector and math declarations are generated from it, so a Swift declaration
-cannot exist without a Metal spelling.
+## Status
 
-Struct members take `@position`, `@pointSize`, `@flat`, and `@color`, which become the
-matching MSL member attributes.
+This is a silly proof of concept. 
 
-Globals must be stored constants. Struct methods, computed/static/observed properties,
-custom operators, async/throwing functions, indirect calls, and additional imports
-are rejected during lowering. Helper overloads receive distinct internal Metal names.
+The language covers a small subset of MSL. Known gaps and lies are in
+[ISSUES.md](ISSUES.md). The list of issues is far from exhaustive.
 
-Swift type errors retain source diagnostics. Valid Swift outside the supported shader
-subset receives a lowering error rather than being silently ignored.
-
-## Buffer bindings and uniforms
-
-Use `@buffer(slot)` on entry-point parameters to select explicit buffer slots:
-
-```swift
-struct Uniforms { var scale: Float; var offset: Float }
-
-@compute
-func transform(@buffer(0) input: Buffer<Float>,
-               @buffer(3) uniforms: Uniforms,
-               @buffer(5) output: Buffer<Float>,
-               gid: GridIndex) {
-    output[gid] = input[gid] * uniforms.scale + uniforms.offset
-}
-```
-
-- `Buffer<T>` lowers to a writable `device T*`.
-- Annotated scalars and structs lower to read-only `constant T&` arguments.
-- Unannotated structs remain `[[stage_in]]`; they do not consume a buffer slot.
-- Explicit slots are reserved first. Remaining resources take the lowest unused
-  slots in parameter order. With no annotations, existing numbering is unchanged.
-- Each entry point allocates its own slots. Duplicates within an entry point are errors.
-- Slot arguments must be nonnegative integer literals from 0 through 30.
-  Decimal, hexadecimal, octal, and binary spellings are supported; named constants
-  and expressions are not evaluated.
-- Helpers and built-in index parameters cannot carry `@buffer`.
-
-The annotation is a read-only Swift parameter property wrapper. Device-buffer
-elements remain writable through their nonmutating subscript setter.
-Host code must bind the specified slots and pack uniform bytes using the emitted
-Metal layout. For example, a `Float4` member requires 16-byte alignment.
-
-## Type identity
-
-Compilation uses only `swiftc -frontend -dump-ast -dump-ast-format json`. Each source
-gets a primary-file invocation with an explicit SDK. JSON arrives on stdout;
-diagnostics arrive on stderr. Failed compiler invocations never reach lowering.
-
-Type fields carry canonical mangled identities. A batched `swift-demangle --expand
---tree-only` adapter decodes nominal types, metatypes, and generic arguments.
-Aliases and qualified spellings share an identity; a user-defined `Float` remains
-distinct from `Swift.Float`. Unsupported type shapes fail during lowering.
-
-Declaration references use USRs rather than printed names or source-path fragments.
-Locals need separate lexical binding because their USRs can be empty. Shadowed locals
-get distinct Metal names so their initializers still refer to the outer binding.
-Nested shader structs also receive distinct internal Metal names.
-
-JSON omits lvalue type qualifiers; read/write handling uses expression structure.
-Source locations use UTF-8 byte offsets, mapped back to the original shader path.
-
-## Layout
-
-- `Sources/Schmetal/ShaderCompiler.swift` — the compilation lifecycle callers use
-- `Sources/Schmetal/ShaderLanguage.swift` — the supported vocabulary and its Metal lowering
-- `Sources/Schmetal/Prelude.swift` — the `MetalStdlib` module source swiftc type-checks against
-- `Sources/Schmetal/TypedAST.swift` — frontend invocation and declaration registry
-- `Sources/Schmetal/JSONASTDecoder.swift` — checked JSON AST normalization and source locations
-- `Sources/Schmetal/DemangledSymbol.swift` — canonical type and declaration-owner decoding
-- `Sources/Schmetal/LocalBindings.swift` — lexical local-reference resolution
-- `Sources/Schmetal/Emitter.swift` — typed AST → MSL
-- `Sources/Schmetal/BufferBindings.swift` — validated explicit and automatic slot allocation
-- `Sources/Schmetal/MetalCompiler.swift` — `.metal` → `.metallib`
-- `Sources/schmetal-cli/CLI.swift` — argument parsing and printing
-
-No external dependencies; everything needed is in the Xcode toolchain.
-
-## How the attributes work
-
-Stage markers use global actors; member and buffer parameter markers use property wrappers.
-This avoids a macro plugin, but Swift applies the actors' and wrappers' semantics
-during type checking. Metal output contains neither actor isolation nor wrapper storage.
-
-The audit tests verify these boundaries with the selected Swift toolchain:
-
-| Source construct | Swift AST checking | Metal lowering |
-|---|---|---|
-| Synchronous cross-stage call | Rejected by actor isolation | Not reached |
-| Nonisolated helper calls a stage function | Rejected by actor isolation | Not reached |
-| Same-stage call to another entry point | Accepted | Rejected |
-| Stage function calls a nonisolated helper | Accepted | Supported |
-| Function named `compute`, `vertex`, or `fragment` | Name collision | Not reached |
-| Memberwise constructor given a wrapped value | Accepted | Supported |
-| Memberwise constructor given a wrapper object | Type mismatch | Not reached |
-| Stored property with a default initializer | Accepted | Rejected; initialization is not implemented |
-| Uninitialized struct followed by member assignments | Accepted at AST stage | Supported; ordinary Swift SIL initialization checks reject the tested case |
-
-For example, `VertexResult(position: value)` takes a `Float4`, not a
-`position<Float4>` wrapper. Emission keeps the `[[position]]` member attribute
-and discards synthesized accessors and backing storage.
-
-These tests characterize the current toolchain and frontend invocation; they do not
-guarantee compatibility with other compiler versions or concurrency settings.
-
-## Caveats
-
-- Compilation invokes `swiftc` and `swift-demangle`; it is not an in-process frontend.
-- Neither JSON AST schemas nor the demangler tree output are guaranteed stable.
-  The adapter and regression suite are tested with Apple Swift 6.4.
-- Prelude bodies are type-checking stubs, not executable reference implementations.
-  Metal mappings remain explicit; the GPU tests cover selected operations, not every mapping.
-- Host binding indices and data layout must match the generated Metal interface.
-  There is no host-side binding or layout generator.
-- Definite-initialization runs in SILGen, which `-dump-ast` stops short of, so
-  `var out: VertexOut` with no initializer is accepted (and is what shaders want).
+Write real `.metal` files for work you care about.
