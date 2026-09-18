@@ -1,7 +1,48 @@
+import CoreGraphics
 import Foundation
+import ImageIO
 import Metal
 import Testing
+import UniformTypeIdentifiers
 @testable import schmetal
+
+/// Writes rendered output as PNG so example results can be eyeballed.
+/// Set SCHMETAL_TEST_IMAGES to a directory to collect them.
+enum TestImages {
+    static var directory: URL? {
+        guard let path = ProcessInfo.processInfo.environment["SCHMETAL_TEST_IMAGES"] else { return nil }
+        let url = URL(fileURLWithPath: path)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    static func write(rgba pixels: [UInt8], width: Int, height: Int, name: String) throws {
+        guard let directory else { return }
+        let data = try #require(CFDataCreate(nil, pixels, pixels.count))
+        let provider = try #require(CGDataProvider(data: data))
+        let image = try #require(CGImage(
+            width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent
+        ))
+        let url = directory.appending(path: name + ".png")
+        let destination = try #require(
+            CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)
+        )
+        CGImageDestinationAddImage(destination, image, nil)
+        #expect(CGImageDestinationFinalize(destination))
+    }
+
+    /// Grayscale image from normalized values.
+    static func write(values: [Float], width: Int, height: Int, name: String) throws {
+        let pixels = values.flatMap { value -> [UInt8] in
+            let level = UInt8(max(0, min(1, value)) * 255)
+            return [level, level, level, 255]
+        }
+        try write(rgba: pixels, width: width, height: height, name: name)
+    }
+}
 
 private struct GPUHarness {
     let device: any MTLDevice
@@ -75,9 +116,17 @@ private struct GPUHarness {
 
     func renderTriangle(library: any MTLLibrary, width: Int, vertexBuffers: [Int: any MTLBuffer],
                         fragmentBuffers: [Int: any MTLBuffer]) throws -> [UInt8] {
+        try render(
+            library: library, vertexFunction: "triangleVertex", fragmentFunction: "triangleFragment",
+            width: width, vertexBuffers: vertexBuffers, fragmentBuffers: fragmentBuffers
+        )
+    }
+
+    func render(library: any MTLLibrary, vertexFunction: String, fragmentFunction: String, width: Int,
+                vertexBuffers: [Int: any MTLBuffer], fragmentBuffers: [Int: any MTLBuffer]) throws -> [UInt8] {
         let descriptor = MTLRenderPipelineDescriptor()
-        descriptor.vertexFunction = try #require(library.makeFunction(name: "triangleVertex"))
-        descriptor.fragmentFunction = try #require(library.makeFunction(name: "triangleFragment"))
+        descriptor.vertexFunction = try #require(library.makeFunction(name: vertexFunction))
+        descriptor.fragmentFunction = try #require(library.makeFunction(name: fragmentFunction))
         descriptor.colorAttachments[0].pixelFormat = .rgba8Unorm
         let pipeline = try device.makeRenderPipelineState(descriptor: descriptor)
         let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
@@ -158,6 +207,9 @@ struct GPUIntegrationTests {
         for index in 0..<count {
             #expect(result[index] >= 0 && result[index] <= 1)
         }
+        try TestImages.write(
+            values: (0..<count).map { result[$0] }, width: width, height: height, name: "mandelbrot"
+        )
         #expect(result[0] < 0.1)
         let inside = (height / 2) * width + Int((-0.5 - origin.x) / span.x)
         #expect(result[inside] == 1)
@@ -166,8 +218,34 @@ struct GPUIntegrationTests {
     @Test func `lighting example renders a lit triangle`() throws {
         let gpu = try GPUHarness()
         let library = try gpu.library(example: "lighting")
-        #expect(library.makeFunction(name: "litVertex") != nil)
-        #expect(library.makeFunction(name: "litFragment") != nil)
+        let width = 32
+
+        // Vertex { float4 position; float3 normal; float3 tint; } — float3 members
+        // occupy 16 bytes each in Metal.
+        let vertices: [SIMD4<Float>] = [
+            [-1, -1, 0, 1], [0, 0, 1, 0], [1, 0, 0, 0],
+            [1, -1, 0, 1], [0, 0, 1, 0], [0, 1, 0, 0],
+            [0, 1, 0, 1], [0, 0, 1, 0], [0, 0, 1, 0]
+        ]
+        let vertexBuffer = try gpu.buffer(values: vertices)
+        let instanceTints = try gpu.buffer(values: [SIMD4<Float>(1, 1, 1, 0)])
+        // Uniforms { float3 lightDirection; float3 lightColor; float ambient; float shininess; }
+        let uniforms = try gpu.buffer(values: [Float](
+            [0, 0, 1, 0] + [1, 1, 1, 0] + [0, 1]
+        ))
+
+        let pixels = try gpu.render(
+            library: library, vertexFunction: "litVertex", fragmentFunction: "litFragment", width: width,
+            vertexBuffers: [0: vertexBuffer, 1: instanceTints], fragmentBuffers: [0: uniforms]
+        )
+        try TestImages.write(rgba: pixels, width: width, height: width, name: "lighting")
+        // The normals face the light, so intensity saturates and each fragment
+        // shows its interpolated vertex tint; the centroid mixes all three.
+        let centroid = ((width * 2 / 3) * width + width / 2) * 4
+        for channel in 0..<3 {
+            #expect(abs(Int(pixels[centroid + channel]) - 85) <= 12)
+        }
+        #expect(Array(pixels[0..<4]) == [0, 0, 255, 255])
     }
 
     @Test func `canonical types overloads and lexical shadowing execute correctly`() throws {
@@ -283,6 +361,9 @@ struct GPUIntegrationTests {
         let pixels = try gpu.renderTriangle(
             library: library, width: width, vertexBuffers: vertexBuffers, fragmentBuffers: fragmentBuffers
         )
+        try TestImages.write(
+            rgba: pixels, width: width, height: width, name: useUniforms ? "triangle-uniforms" : "triangle"
+        )
         let center = (16 * width + 16) * 4
         let expectedCenter: [UInt8] = useUniforms ? [0, 255, 0, 255] : [255, 0, 0, 255]
         #expect(Array(pixels[center..<(center + 4)]) == expectedCenter)
@@ -291,4 +372,57 @@ struct GPUIntegrationTests {
         #expect(Array(pixels[side..<(side + 4)]) == expectedSide)
         #expect(Array(pixels[0..<4]) == [0, 0, 255, 255])
     }
+
+    /// Renders the examples at presentation size, for Examples/Images.
+    /// Does nothing unless SCHMETAL_TEST_IMAGES names an output directory.
+    @Test func `example gallery images render`() throws {
+        guard TestImages.directory != nil else { return }
+        let gpu = try GPUHarness()
+
+        let width = 768
+        let height = 512
+        let origin = SIMD2<Float>(-2.2, -1.3)
+        let span = SIMD2<Float>(3.0 / Float(width), 2.6 / Float(height))
+        let viewport = try gpu.buffer(values: [
+            origin.x.bitPattern, origin.y.bitPattern, span.x.bitPattern, span.y.bitPattern, UInt32(width)
+        ])
+        let count = width * height
+        let output = try gpu.buffer(values: [Float](repeating: 0, count: count))
+        try gpu.dispatch(
+            "mandelbrot", library: try gpu.library(example: "mandelbrot"),
+            bindings: [0: viewport, 1: output], count: count
+        )
+        let escapeTimes = output.contents().assumingMemoryBound(to: Float.self)
+        try TestImages.write(
+            values: (0..<count).map { escapeTimes[$0] }, width: width, height: height, name: "mandelbrot-large"
+        )
+
+        let vertices: [SIMD4<Float>] = [
+            [-0.9, -0.8, 0, 1], [0, 0, 1, 0], [1, 0, 0, 0],
+            [0.9, -0.8, 0, 1], [0, 0, 1, 0], [0, 1, 0, 0],
+            [0, 0.9, 0, 1], [0, 0, 1, 0], [0, 0, 1, 0]
+        ]
+        let lightingPixels = try gpu.render(
+            library: try gpu.library(example: "lighting"),
+            vertexFunction: "litVertex", fragmentFunction: "litFragment", width: 512,
+            vertexBuffers: [0: try gpu.buffer(values: vertices), 1: try gpu.buffer(values: [SIMD4<Float>(1, 1, 1, 0)])],
+            fragmentBuffers: [0: try gpu.buffer(values: [Float]([0, 0, 1, 0] + [1, 1, 1, 0] + [0, 1]))]
+        )
+        try TestImages.write(rgba: lightingPixels, width: 512, height: 512, name: "lighting-large")
+
+        let trianglePixels = try gpu.renderTriangle(
+            library: try gpu.library(example: "triangle"), width: 512,
+            vertexBuffers: [
+                0: try gpu.buffer(values: [
+                    SIMD4<Float>(-0.9, -0.8, 0, 1), SIMD4<Float>(0.9, -0.8, 0, 1), SIMD4<Float>(0, 0.9, 0, 1)
+                ]),
+                1: try gpu.buffer(values: [
+                    SIMD4<Float>(1, 0, 0, 1), SIMD4<Float>(1, 0.6, 0, 1), SIMD4<Float>(1, 0.9, 0.2, 1)
+                ])
+            ],
+            fragmentBuffers: [:]
+        )
+        try TestImages.write(rgba: trianglePixels, width: 512, height: 512, name: "triangle-large")
+    }
 }
+

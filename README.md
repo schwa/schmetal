@@ -16,11 +16,16 @@ approximation of them.
 
 ```fish
 xcb build
-xcb run -- build Examples/add.schmetal              # → add.metal + add.metallib
+xcb run -- build Examples/add.schmetal              # → Examples/Generated/add.metal + .metallib
 xcb run -- build Examples/add.schmetal -D scale=8.0 # specialize a global constant
 xcb run -- build Examples/add.schmetal --emit-metal # stop after .metal
 xcb run -- dump Examples/add.schmetal              # print the normalized typed AST
 ```
+
+Generated `.metal` and `.metallib` files go to a `Generated/` subdirectory beside
+the shader, unless `-o` names a library path.
+`Examples/Images` holds rendered output; regenerate it with
+`SCHMETAL_TEST_IMAGES=Examples/Images xcb test`.
 
 Examples: `add` (compute plus specialization), `triangle` (vertex/fragment),
 `mandelbrot` (uniform struct, helper function, `while` loop), and `lighting`

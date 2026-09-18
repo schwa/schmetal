@@ -71,7 +71,13 @@ struct CLI {
         var emitter = Emitter(ast: ast, specializations: specializations)
         let metal = try emitter.emit()
 
-        let base = (input as NSString).deletingPathExtension
+        // Generated Metal and libraries land in a Generated/ subdirectory beside
+        // the shader so the source directory stays readable.
+        let directory = (input as NSString).deletingLastPathComponent
+        let generated = (directory.isEmpty ? "Generated" : directory + "/Generated")
+        try FileManager.default.createDirectory(atPath: generated, withIntermediateDirectories: true)
+        let name = ((input as NSString).lastPathComponent as NSString).deletingPathExtension
+        let base = generated + "/" + name
         let metalPath = base + ".metal"
         try metal.write(toFile: metalPath, atomically: true, encoding: .utf8)
         print("wrote \(metalPath)")
