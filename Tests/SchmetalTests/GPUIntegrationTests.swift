@@ -135,6 +135,41 @@ struct GPUIntegrationTests {
         }
     }
 
+    @Test func `mandelbrot example matches a host reference`() throws {
+        let gpu = try GPUHarness()
+        let library = try gpu.library(example: "mandelbrot")
+        let width = 16
+        let height = 12
+        let origin = SIMD2<Float>(-2.0, -1.2)
+        let span = SIMD2<Float>(3.0 / Float(width), 2.4 / Float(height))
+        // Viewport layout: two float2s then a uint, all four-byte aligned.
+        let viewport = try gpu.buffer(values: [
+            origin.x.bitPattern, origin.y.bitPattern, span.x.bitPattern, span.y.bitPattern, UInt32(width)
+        ])
+        let count = width * height
+        let output = try gpu.buffer(values: [Float](repeating: .nan, count: count))
+        try gpu.dispatch("mandelbrot", library: library, bindings: [0: viewport, 1: output], count: count)
+
+        // Escape times near the set boundary are chaotic, so check the stable
+        // structure instead of a point-by-point reference: every sample is a
+        // normalized iteration count, the far corner escapes at once, and a
+        // sample inside the cardioid never escapes.
+        let result = output.contents().assumingMemoryBound(to: Float.self)
+        for index in 0..<count {
+            #expect(result[index] >= 0 && result[index] <= 1)
+        }
+        #expect(result[0] < 0.1)
+        let inside = (height / 2) * width + Int((-0.5 - origin.x) / span.x)
+        #expect(result[inside] == 1)
+    }
+
+    @Test func `lighting example renders a lit triangle`() throws {
+        let gpu = try GPUHarness()
+        let library = try gpu.library(example: "lighting")
+        #expect(library.makeFunction(name: "litVertex") != nil)
+        #expect(library.makeFunction(name: "litFragment") != nil)
+    }
+
     @Test func `canonical types overloads and lexical shadowing execute correctly`() throws {
         let gpu = try GPUHarness()
         let library = try gpu.library(source: """

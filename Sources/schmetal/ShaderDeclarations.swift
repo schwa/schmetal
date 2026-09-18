@@ -70,15 +70,16 @@ struct ShaderDeclarations {
     func isPreludeFunction(_ reference: ASTNode, name: String) -> Bool {
         registered(reference)?["source_file"] == ast.preludeCompilerPath
             && registered(reference)?.kind == "func_decl"
-            && owner(reference) == "SchmetalShader" && reference.declBaseName == name
+            && owner(reference) == ShaderLanguage.moduleName && reference.declBaseName == name
     }
 
     func isSwiftIntrinsic(_ reference: ASTNode, name: String) -> Bool {
-        ["min", "max", "abs"].contains(name) && owner(reference) == "Swift" && reference.declBaseName == name
+        ShaderLanguage.swiftStandardLibraryIntrinsics.contains(name)
+            && owner(reference) == "Swift" && reference.declBaseName == name
     }
 
     func validateOperator(_ reference: ASTNode, name: String) throws {
-        let scalars = ["Float", "Double", "Float16", "Int", "Int32", "UInt", "UInt32", "Bool"].map { "Swift." + $0 }
+        let scalars = ShaderLanguage.operatorScalarTypes
         guard reference.declBaseName == name, let context = owner(reference) else {
             throw SchmetalError("unresolved operator identity")
         }
@@ -86,13 +87,12 @@ struct ShaderDeclarations {
         let replacements = reference["substitution_types"]?.split(separator: "|").map(String.init) ?? []
         if replacements.count == 1, replacements.allSatisfy(scalars.contains) {
             if name == "+", context == "Swift.AdditiveArithmetic" { return }
-            let comparisons = ["<", ">", "<=", ">=", "==", "!="]
-            if comparisons.contains(name), ["Swift.Comparable", "Swift.Equatable"].contains(context) {
+            if ShaderLanguage.comparisonOperators.contains(name), ["Swift.Comparable", "Swift.Equatable"].contains(context) {
                 return
             }
         }
         if registered(reference)?["source_file"] == ast.preludeCompilerPath,
-           ["SchmetalShader.Float2", "SchmetalShader.Float3", "SchmetalShader.Float4"].contains(context) { return }
+           ShaderLanguage.arithmeticVectorTypeNames.contains(context) { return }
         throw SchmetalError("unsupported operator declaration: \(reference["decl"] ?? name)")
     }
 
@@ -119,16 +119,20 @@ struct ShaderDeclarations {
             throw SchmetalError("unsupported member identity")
         }
         if declaration["source_file"] == ast.shaderCompilerPath { return }
-        let vectors = ["Float2", "Float3", "Float4", "UInt2", "UInt3"].map { "SchmetalShader." + $0 }
-        guard declaration["source_file"] == ast.preludeCompilerPath, vectors.contains(owner(reference) ?? ""),
-              ["x", "y", "z", "w"].contains(reference.declBaseName ?? "") else {
+        let context = owner(reference) ?? ""
+        if declaration["source_file"] == ast.preludeCompilerPath,
+           ShaderLanguage.indexTypes[context] != nil,
+           reference.declBaseName == ShaderLanguage.indexRawComponent { return }
+        guard declaration["source_file"] == ast.preludeCompilerPath,
+              ShaderLanguage.vectorTypeNames.contains(context),
+              ShaderLanguage.componentNames.contains(reference.declBaseName ?? "") else {
             throw SchmetalError("unsupported member declaration: \(reference["decl"] ?? "unknown")")
         }
     }
 
     func validateSubscript(_ reference: ASTNode) throws {
         guard registered(reference)?["source_file"] == ast.preludeCompilerPath,
-              owner(reference) == "SchmetalShader.Buffer", reference.declBaseName == "subscript" else {
+              owner(reference) == ShaderLanguage.bufferType, reference.declBaseName == "subscript" else {
             throw SchmetalError("only Buffer subscripts are supported")
         }
     }

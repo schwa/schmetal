@@ -22,6 +22,10 @@ xcb run -- build Examples/add.schmetal --emit-metal # stop after .metal
 xcb run -- dump Examples/add.schmetal              # print the normalized typed AST
 ```
 
+Examples: `add` (compute plus specialization), `triangle` (vertex/fragment),
+`mandelbrot` (uniform struct, helper function, `while` loop), and `lighting`
+(shared uniforms, `@flat` stage-in member, instanced vertex fetch).
+
 ## Tests
 
 Run `xcb test`. GPU integration tests compile the example shaders, load their
@@ -58,6 +62,12 @@ have matching types; vector `mix` also accepts a scalar `Float` weight.
 
 Types: `Float`, `Double`, `Int`, `Int32`, `UInt`, `UInt32`, `Bool`, `Half`,
 `Float2/3/4`, `UInt2/3`, `Buffer<T>`, `GridIndex`, `VertexIndex`, `InstanceIndex`.
+Index types expose `.raw` as a `UInt32` for arithmetic; it costs nothing in Metal
+because the parameter is already a `uint`.
+
+`Sources/schmetal/ShaderLanguage.swift` owns this vocabulary. The prelude's
+vector and math declarations are generated from it, so a Swift declaration
+cannot exist without a Metal spelling.
 
 Struct members take `@position`, `@pointSize`, `@flat`, and `@color`, which become the
 matching MSL member attributes.

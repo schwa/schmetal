@@ -297,12 +297,13 @@ Full local report and reproducible probes: /tmp/schmetal-ast-audit/REPORT.md (te
 ## 17: Metal lowering rules are not declared alongside stdlib types
 
 +++
-status: open
+status: closed
 priority: medium
 kind: enhancement
 labels: effort:m, area:lowering
 created: 2026-09-17T00:46:05Z
-updated: 2026-09-17T15:16:14Z
+updated: 2026-09-18T13:02:56Z
+closed: 2026-09-18T13:02:56Z
 +++
 
 Prelude.swift declares shader types, while Metal spellings, pointer rules, and entry-point attributes live separately in Emitter.swift. Adding or renaming a type requires keeping both definitions aligned, without a consistency check. The previous msf vocabulary limitation is obsolete, but the duplicated lowering metadata remains.
@@ -458,12 +459,13 @@ Related: #16, #18, #20.
 ## 25: Shader language support is split between prelude and lowering tables
 
 +++
-status: open
+status: closed
 priority: medium
 kind: task
 labels: effort:m, area:language
 created: 2026-09-17T15:17:59Z
-updated: 2026-09-17T15:19:12Z
+updated: 2026-09-18T13:02:56Z
+closed: 2026-09-18T13:02:56Z
 +++
 
 Architecture RFC candidate: deepen ownership of shader-language definitions. Prelude.swift declares Swift types and operations while Emitter.swift separately defines Metal types, intrinsics, stages, and member attributes. Determining whether an operation is supported requires checking both; missing math declarations demonstrate the integration risk.

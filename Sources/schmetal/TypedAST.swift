@@ -99,7 +99,7 @@ enum SwiftFrontend {
             let output = try ToolProcess.run(
                 executable: URL(fileURLWithPath: "/usr/bin/xcrun"),
                 arguments: ["swiftc", "-frontend", "-dump-ast", "-dump-ast-format", "json", "-sdk", sdk,
-                            "-module-name", "SchmetalShader", "-primary-file", file] + files.filter { $0 != file }
+                            "-module-name", ShaderLanguage.moduleName, "-primary-file", file] + files.filter { $0 != file }
             )
             let decoded = try JSONSerialization.jsonObject(with: Data(output.standardOutput.utf8))
             guard let object = decoded as? [String: Any], object["_kind"] as? String == "source_file" else {

@@ -29,7 +29,7 @@ struct BufferBindings {
     private static func explicitSlot(_ parameter: ASTNode, name: String) throws -> Int? {
         let attributes = parameter.children(of: "custom_attr")
         guard !attributes.isEmpty else { return nil }
-        guard attributes.count == 1, let attribute = attributes.first, attribute.type == "SchmetalShader.buffer" else {
+        guard attributes.count == 1, let attribute = attributes.first, attribute.type == ShaderLanguage.bufferAttribute else {
             throw SchmetalError("unsupported parameter attribute on '\(name)'")
         }
         let arguments = attribute.firstChild(of: "argument_list")?.children(of: "argument") ?? []

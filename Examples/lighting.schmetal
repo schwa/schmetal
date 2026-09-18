@@ -1,0 +1,65 @@
+// Vertex and fragment stages sharing a uniform struct, with interpolated and
+// flat stage-in members plus a Blinn-Phong style fragment shader.
+
+import Schmetal
+
+struct Uniforms {
+    var lightDirection: Float3
+    var lightColor: Float3
+    var ambient: Float
+    var shininess: Float
+}
+
+struct Vertex {
+    var position: Float4
+    var normal: Float3
+    var tint: Float3
+}
+
+struct Fragment {
+    @position var position: Float4
+    var normal: Float3
+    var tint: Float3
+    @flat var materialID: UInt32
+}
+
+func saturate(value: Float) -> Float {
+    return clamp(value, 0.0, 1.0)
+}
+
+func lambert(normal: Float3, direction: Float3) -> Float {
+    return saturate(value: dot(normal, direction))
+}
+
+@vertex
+func litVertex(
+    @buffer(0) vertices: Buffer<Vertex>,
+    @buffer(1) instanceTints: Buffer<Float3>,
+    vertexID: VertexIndex,
+    instanceID: InstanceIndex
+) -> Fragment {
+    let source: Vertex = vertices[vertexID]
+    var out: Fragment
+    out.position = source.position
+    out.normal = source.normal
+    out.tint = Float3(
+        source.tint.x * instanceTints[instanceID].x,
+        source.tint.y * instanceTints[instanceID].y,
+        source.tint.z * instanceTints[instanceID].z
+    )
+    out.materialID = instanceID.raw
+    return out
+}
+
+@fragment
+func litFragment(input: Fragment, @buffer(0) uniforms: Uniforms) -> Float4 {
+    let diffuse: Float = lambert(normal: input.normal, direction: uniforms.lightDirection)
+    let specular: Float = pow(diffuse, uniforms.shininess)
+    let intensity: Float = saturate(value: uniforms.ambient + diffuse + specular)
+    let lit: Float3 = Float3(
+        input.tint.x * uniforms.lightColor.x * intensity,
+        input.tint.y * uniforms.lightColor.y * intensity,
+        input.tint.z * uniforms.lightColor.z * intensity
+    )
+    return Float4(lit.x, lit.y, lit.z, 1.0)
+}

@@ -9,39 +9,6 @@ struct Emitter {
 
     private var shaderDeclarations: ShaderDeclarations { ShaderDeclarations(ast: ast) }
 
-    private static let scalarTypes: [String: String] = [
-        "Swift.Float": "float", "Swift.Double": "float", "Swift.Int": "int", "Swift.Int32": "int",
-        "Swift.UInt": "uint", "Swift.UInt32": "uint", "Swift.Bool": "bool", "Swift.Float16": "half",
-        "SchmetalShader.Float2": "float2", "SchmetalShader.Float3": "float3", "SchmetalShader.Float4": "float4",
-        "SchmetalShader.UInt2": "uint2", "SchmetalShader.UInt3": "uint3"
-    ]
-
-    /// Swift names that lower to an MSL function of the same or a different name.
-    private static let intrinsics: [String: String] = [
-        "min": "min", "max": "max", "abs": "abs", "sqrt": "sqrt",
-        "sin": "sin", "cos": "cos", "pow": "pow", "clamp": "clamp",
-        "floor": "floor", "ceil": "ceil", "mix": "mix", "dot": "dot",
-    ]
-
-    /// Initializers that lower to an MSL conversion or vector constructor.
-    private static let conversions: [String: String] = [
-        "Swift.Float": "float", "Swift.Int": "int", "Swift.UInt": "uint", "Swift.UInt32": "uint",
-        "Swift.Int32": "int", "Swift.Float16": "half",
-        "SchmetalShader.Float2": "float2", "SchmetalShader.Float3": "float3", "SchmetalShader.Float4": "float4",
-        "SchmetalShader.UInt2": "uint2", "SchmetalShader.UInt3": "uint3"
-    ]
-
-    /// Builtin index types and their entry-point attribute.
-    private static let indexAttributes: [String: String] = [
-        "SchmetalShader.GridIndex": "thread_position_in_grid",
-        "SchmetalShader.VertexIndex": "vertex_id",
-        "SchmetalShader.InstanceIndex": "instance_id"
-    ]
-
-    private static let memberAttributes: [String: String] = [
-        "SchmetalShader.position": "position", "SchmetalShader.pointSize": "point_size", "SchmetalShader.flat": "flat"
-    ]
-
     mutating func emit() throws -> String {
         try shaderDeclarations.validate()
         var output = """
@@ -125,10 +92,10 @@ struct Emitter {
 
             var attribute = ""
             if let wrapper = member.firstChild(of: "custom_attr")?["type"] {
-                if wrapper == "SchmetalShader.color" {
+                if wrapper == ShaderLanguage.colorAttribute {
                     attribute = " [[color(\(colorIndex))]]"
                     colorIndex += 1
-                } else if let mapped = Self.memberAttributes[wrapper] {
+                } else if let mapped = ShaderLanguage.memberAttributes[wrapper] {
                     attribute = " [[\(mapped)]]"
                 } else {
                     throw SchmetalError("unknown attribute '@\(wrapper)' on \(name).\(memberName)")
@@ -146,16 +113,17 @@ struct Emitter {
         let stage = node.firstChild(of: "custom_attr")?["type"]
         let qualifier: String
         switch stage {
-        case "SchmetalShader.compute": qualifier = "kernel"
-        case "SchmetalShader.vertex": qualifier = "vertex"
-        case "SchmetalShader.fragment": qualifier = "fragment"
         case nil: qualifier = "static"
-        case let other?: throw SchmetalError("unknown attribute '@\(other)' on \(name)")
+        case let marker?:
+            guard let mapped = ShaderLanguage.stages[marker] else {
+                throw SchmetalError("unknown attribute '@\(marker)' on \(name)")
+            }
+            qualifier = mapped
         }
         let isEntryPoint = qualifier != "static"
 
         let parameterNodes = node.firstChild(of: "parameter_list")?.children(of: "parameter") ?? []
-        let nonBindable = Set(parameterNodes.filter { Self.indexAttributes[$0.type ?? ""] != nil }.compactMap(\.name))
+        let nonBindable = Set(parameterNodes.filter { ShaderLanguage.indexTypes[$0.type ?? ""] != nil }.compactMap(\.name))
         let automaticResources = Set(parameterNodes.filter {
             !nonBindable.contains($0.name ?? "") && structTypes[$0.type ?? ""] == nil
         }.compactMap(\.name))
@@ -187,7 +155,7 @@ struct Emitter {
         guard let name = node.name else { throw SchmetalError("unnamed parameter") }
         guard let type = node.type else { throw SchmetalError("parameter '\(name)' has no type") }
 
-        if let attribute = Self.indexAttributes[type] {
+        if let attribute = ShaderLanguage.indexTypes[type] {
             return isEntryPoint ? "uint \(name) [[\(attribute)]]" : "uint \(name)"
         }
 
@@ -316,6 +284,10 @@ extension Emitter {
             try shaderDeclarations.validateMember(node)
             guard let base = node.children.first else { throw SchmetalError("malformed member access") }
             guard let member = node.declBaseName else { throw SchmetalError("unresolved member") }
+            // An index parameter is already a uint in Metal, so `.raw` is a no-op.
+            if member == ShaderLanguage.indexRawComponent, ShaderLanguage.indexTypes[base.type ?? ""] != nil {
+                return try emitExpression(base)
+            }
             return "\(try emitExpression(base)).\(member)"
 
         case "subscript_expr":
@@ -424,7 +396,7 @@ extension Emitter {
             try shaderDeclarations.validateConstructor(
                 reference, typeName: typeName, shaderStruct: structTypes[typeName] != nil
             )
-            if let mapped = Self.conversions[typeName] {
+            if let mapped = ShaderLanguage.constructors[typeName] {
                 return "\(mapped)(\(operands.joined(separator: ", ")))"
             }
             if let structure = structTypes[typeName] {
@@ -442,8 +414,8 @@ extension Emitter {
         let name = String(signature.prefix { $0 != "(" })
         let supported = shaderDeclarations.isPreludeFunction(callee, name: name)
             || shaderDeclarations.isSwiftIntrinsic(callee, name: name)
-        if let mapped = Self.intrinsics[name], supported {
-            return "\(mapped)(\(operands.joined(separator: ", ")))"
+        if let intrinsic = ShaderLanguage.intrinsicsByName[name], supported {
+            return "\(intrinsic.metal)(\(operands.joined(separator: ", ")))"
         }
         throw SchmetalError("unsupported function declaration: \(callee["decl"] ?? signature)")
     }
@@ -452,8 +424,9 @@ extension Emitter {
 
     /// `Buffer<Float4>` → `Float4`.
     private func bufferElement(of type: String) -> String? {
-        guard type.hasPrefix("SchmetalShader.Buffer<"), type.hasSuffix(">") else { return nil }
-        return String(type.dropFirst("SchmetalShader.Buffer<".count).dropLast())
+        let prefix = ShaderLanguage.bufferType + "<"
+        guard type.hasPrefix(prefix), type.hasSuffix(">") else { return nil }
+        return String(type.dropFirst(prefix.count).dropLast())
     }
 
     private func metalReturnType(_ type: String?, context: String) throws -> String {
@@ -468,7 +441,7 @@ extension Emitter {
         if let element = bufferElement(of: type) {
             return "device \(try metalType(element, context: context)) *"
         }
-        guard let mapped = Self.scalarTypes[type] else {
+        guard let mapped = ShaderLanguage.metalTypes[type] else {
             throw SchmetalError("no Metal type for '\(type)' in \(context)")
         }
         return mapped

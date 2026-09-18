@@ -1,0 +1,36 @@
+// Escape-time Mandelbrot: uniform struct bindings, a helper function, and a
+// while loop that runs entirely on the GPU.
+
+import Schmetal
+
+let maximumIterations: Int = 128
+
+struct Viewport {
+    var origin: Float2
+    var span: Float2
+    var width: UInt32
+}
+
+func escapeTime(c: Float2) -> Float {
+    var x: Float = 0.0
+    var y: Float = 0.0
+    var iteration: Int = 0
+    while x * x + y * y <= 4.0 && iteration < maximumIterations {
+        let nextX: Float = x * x - y * y + c.x
+        y = 2.0 * x * y + c.y
+        x = nextX
+        iteration = iteration + 1
+    }
+    return Float(iteration) / Float(maximumIterations)
+}
+
+@compute
+func mandelbrot(@buffer(0) viewport: Viewport, @buffer(1) out: Buffer<Float>, gid: GridIndex) {
+    let column: UInt32 = gid.raw % viewport.width
+    let row: UInt32 = gid.raw / viewport.width
+    let point: Float2 = Float2(
+        viewport.origin.x + viewport.span.x * Float(column),
+        viewport.origin.y + viewport.span.y * Float(row)
+    )
+    out[gid] = escapeTime(c: point)
+}
