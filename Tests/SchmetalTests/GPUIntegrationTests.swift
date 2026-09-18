@@ -4,7 +4,7 @@ import ImageIO
 import Metal
 import Testing
 import UniformTypeIdentifiers
-@testable import schmetal
+@testable import Schmetal
 
 /// Writes rendered output as PNG so example results can be eyeballed.
 /// Set SCHMETAL_TEST_IMAGES to a directory to collect them.

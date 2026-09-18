@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import schmetal
+@testable import Schmetal
 
 @Test(arguments: ["compute", "vertex", "fragment"])
 func `stage actor names collide with function declarations`(name: String) throws {

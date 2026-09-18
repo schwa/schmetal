@@ -3,7 +3,7 @@
 
 import Schmetal
 
-let maximumIterations: Int = 128
+let maximumIterations: Int32 = 128
 
 struct Viewport {
     var origin: Float2
@@ -14,7 +14,7 @@ struct Viewport {
 func escapeTime(c: Float2) -> Float {
     var x: Float = 0.0
     var y: Float = 0.0
-    var iteration: Int = 0
+    var iteration: Int32 = 0
     while x * x + y * y <= 4.0 && iteration < maximumIterations {
         let nextX: Float = x * x - y * y + c.x
         y = 2.0 * x * y + c.y

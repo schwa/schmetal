@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import schmetal
+@testable import Schmetal
 
 @Test func `large output on both streams completes without pipe backpressure`() throws {
     let output = try ToolProcess.run(

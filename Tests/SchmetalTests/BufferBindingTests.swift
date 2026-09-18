@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import schmetal
+@testable import Schmetal
 
 @Test func `explicit slots are reserved before automatic bindings`() throws {
     try withShader("""

@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import schmetal
+@testable import Schmetal
 
 func withShader(_ source: String, body: (String) throws -> Void) throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)

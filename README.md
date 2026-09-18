@@ -12,6 +12,19 @@ The shader is compiled as ordinary Swift against a generated prelude, so name re
 overload selection, and type inference are the real Swift implementations rather than an
 approximation of them.
 
+## Package layout
+
+- `Schmetal` library — the compiler. `ShaderCompiler` owns the whole lifecycle
+  (prelude staging, Swift frontend, lowering, Metal toolchain):
+
+  ```swift
+  let result = try ShaderCompiler(specializations: ["scale": "8.0"])
+      .compile(shaderPath: "Examples/add.schmetal")
+  print(result.libraryPath!)
+  ```
+
+- `schmetal` executable — argument parsing and printing only.
+
 ## Use
 
 ```fish

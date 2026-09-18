@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import schmetal
+@testable import Schmetal
 
 @Test func `demangler distinguishes canonical scalar and generic identities`() throws {
     let symbols = try DemangledSymbol.load(["$sSfD", "$s13SchmetalProbe5FloatVD", "$s13SchmetalProbe6BufferVySfGD"])

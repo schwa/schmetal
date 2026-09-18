@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import schmetal
+@testable import Schmetal
 
 /// The boundary contract: everything `ShaderLanguage` advertises must both
 /// type-check as Swift and compile as Metal.

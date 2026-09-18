@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import schmetal
+@testable import Schmetal
 
 @Test(arguments: [
     "typealias Scalar = Swift.Float\ntypealias Chained = Scalar\ntypealias Storage<T> = Buffer<T>",

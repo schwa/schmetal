@@ -485,12 +485,13 @@ Related: #17 describes the existing metadata drift; #22 covers marker semantics;
 ## 26: Compilation lifecycle has no boundary outside CLI orchestration
 
 +++
-status: open
+status: closed
 priority: medium
 kind: task
 labels: effort:m, area:frontend
 created: 2026-09-17T15:17:59Z
-updated: 2026-09-17T15:19:12Z
+updated: 2026-09-18T13:21:31Z
+closed: 2026-09-18T13:21:31Z
 +++
 
 Architecture RFC candidate: deepen ownership of the compilation lifecycle. CLI, prelude staging, frontend execution, diagnostics, and MetalCompiler divide responsibility for temporary files, subprocess failures, output paths, and cleanup. Tests manually reconstruct the compilation sequence, leaving its integration behavior difficult to exercise independently of the CLI.
@@ -504,5 +505,86 @@ Test impact: replace manual pipeline assembly with compilation-boundary tests co
 Related: #19 tracks subprocess correctness; #21 tracks language regression coverage.
 
 - `2026-09-17T15:19:12Z`: Triage: effort:m sizes the compilation-lifecycle RFC/design exploration. Related to #19 (subprocess correctness) and #21 (regression coverage); fixes to those issues need not wait for this design.
+
+---
+
+## 27: Double type-checks but silently lowers to single precision
+
++++
+status: new
+priority: medium
+kind: bug
+labels: area:language, effort:s
+created: 2026-09-18T13:20:34Z
++++
+
+Shaders can declare and use `Double` values: the prelude advertises `Double` math overloads and the lowering tables map `Swift.Double` to Metal `float`.
+
+Metal has no double precision, so a shader written with `Double` runs at single precision with no diagnostic. The source claims a precision the compiled shader does not have.
+
+Repro:
+1. Write a shader containing `let value: Double = 1.0`.
+2. Build it.
+3. The generated Metal declares `float value`.
+
+Expected: `Double` is either rejected with a clear diagnostic, or its demotion is a documented, deliberate contract.
+Actual: silent demotion to `float`.
+
+Note: rejecting `Double` makes unannotated float literals (which default to `Double`) fail to type-check; see the companion issue about literal defaulting.
+
+---
+
+## 28: Unannotated float literals infer Double, forcing explicit Float annotations
+
++++
+status: new
+priority: medium
+kind: enhancement
+labels: area:language, effort:m
+depends: 27
+created: 2026-09-18T13:20:40Z
++++
+
+Every floating-point local in a shader needs an explicit `: Float` annotation, because a bare literal infers Swift's default literal type `Double`.
+
+```swift
+var x: Float = 0.0   // required
+var x = 0.0          // infers Double
+```
+
+Mixing the two is a type error, since shaders have no implicit conversions, so the annotations are load-bearing rather than stylistic. Examples/mandelbrot.schmetal annotates every scalar for this reason.
+
+Unclear whether the prelude can influence literal defaulting for a shader translation unit (the Swift stdlib's `FloatLiteralType` typealias is not generally overridable per module). Needs investigation before any behaviour change.
+
+Expected: a bare float literal in a shader behaves as `Float`, or the constraint is documented and diagnosed clearly.
+Actual: it infers `Double`, which today lowers silently to Metal `float` (see #27).
+
+---
+
+## 29: Int and UInt silently narrow to 32-bit Metal integers
+
++++
+status: new
+priority: medium
+kind: bug
+labels: area:language, effort:s
+created: 2026-09-18T13:21:22Z
++++
+
+`Swift.Int` and `Swift.UInt` are 64-bit on the host but lower to Metal `int` and `uint`, which are 32-bit. The narrowing has no diagnostic.
+
+Integer literals default to `Int`, so unannotated integer locals take the 64-bit type by default, and `Int` is the natural spelling a Swift author reaches for. Examples/mandelbrot.schmetal uses `Int` for its iteration counter.
+
+Repro:
+1. Write a shader containing `let value: Int = 3000000000`.
+2. Build it.
+3. The generated Metal declares `int value`, which cannot represent the value.
+
+Expected: either `Int`/`UInt` are rejected in favour of `Int32`/`UInt32`, or the width contract is documented and out-of-range values are diagnosed.
+Actual: silent narrowing to 32-bit.
+
+There is also no supported spelling for a 64-bit integer: `Int64` and `UInt64` are not in the shader vocabulary at all.
+
+Related: #27 (Double demoted to float) and #28 (literal defaulting) are the same problem in the floating-point domain.
 
 ---

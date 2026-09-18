@@ -1,8 +1,8 @@
 import Foundation
 
-struct SchmetalError: Error, CustomStringConvertible {
-    var description: String
-    init(_ description: String) { self.description = description }
+public struct SchmetalError: Error, CustomStringConvertible {
+    public var description: String
+    public init(_ description: String) { self.description = description }
 }
 
 struct ASTNode {
