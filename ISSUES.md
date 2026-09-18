@@ -667,3 +667,29 @@ Expected: the address space is part of what a parameter declares.
 Actual: it is a fixed consequence of the parameter type.
 
 ---
+
+## 33: Alternative backend: emit LLVM IR and compile via llvm-to-air
+
++++
+status: new
+priority: low
+kind: enhancement
+labels: effort:xl,area:backend
+created: 2026-09-18T14:15:21Z
++++
+
+Idea, not planned. Recorded so it is not rediscovered.
+
+Instead of emitting `.metal` text and shelling out to `xcrun metal`, schmetal could emit LLVM IR (or an MLIR dialect) and lower it to AIR bitcode, then package a `.metallib` directly. That removes the Xcode toolchain dependency from the compile path.
+
+Prior art: <https://github.com/xdslproject/llvm-to-air> (reverse-engineered LLVM IR -> AIR -> metallib lowering, written in Python/xDSL, ~560 lines for the core pass).
+
+Why we are not doing it:
+
+- That project is compute-only. There is no vertex/fragment, stage_in, interpolation, or texture support, so `@vertex`/`@fragment` shaders have no lowering path. The graphics half of AIR metadata is the undocumented, hard part.
+- Every MSL stdlib call (`dot`, `clamp`, `pow`, vector constructors, texture sampling) is currently resolved for free by the Metal frontend. Through LLVM IR each one must be hand-lowered to an AIR intrinsic.
+- AIR is proprietary and version-sensitive, so the lowering is brittle across OS releases.
+
+If ever revisited, the scoped version is a compute-only second backend behind a flag, with the `.metal` text path kept for graphics.
+
+---
