@@ -1,4 +1,4 @@
-import Schmetal
+import MetalStdlib
 
 let tint: Float = 1.0
 

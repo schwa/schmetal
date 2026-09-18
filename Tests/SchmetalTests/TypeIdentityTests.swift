@@ -8,7 +8,7 @@ import Testing
 ])
 func `aliases and generic aliases compile using canonical types`(aliases: String) throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     \(aliases)
     typealias Index = GridIndex
     @compute func copy(input: Storage<Chained>, output: Buffer<Scalar>, gid: Index) {
@@ -27,7 +27,7 @@ func `aliases and generic aliases compile using canonical types`(aliases: String
 
 @Test func `user Float remains distinct from Swift Float`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     struct Float { var value: Swift.Float }
     @compute func copy(input: Buffer<Float>, output: Buffer<Swift.Float>, gid: GridIndex) {
         let value = input[gid]
@@ -44,7 +44,7 @@ func `aliases and generic aliases compile using canonical types`(aliases: String
 
 @Test func `nested nominal types and scoped aliases retain identity`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     struct First { struct Value { var number: Swift.Float }; typealias Scalar = Swift.Float }
     struct Second { struct Value { var number: Swift.Int32 } }
     typealias FirstBuffer = Buffer<First.Value>
@@ -61,7 +61,7 @@ func `aliases and generic aliases compile using canonical types`(aliases: String
 
 @Test func `local shadowing preserves initializer binding`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     @compute func shadow(input: Buffer<Float>, output: Buffer<Float>, gid: GridIndex) {
         let value = input[gid]
         if value > 0 {

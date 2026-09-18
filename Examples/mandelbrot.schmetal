@@ -1,7 +1,7 @@
 // Escape-time Mandelbrot: uniform struct bindings, a helper function, and a
 // while loop that runs entirely on the GPU.
 
-import Schmetal
+import MetalStdlib
 
 let maximumIterations: Int32 = 128
 

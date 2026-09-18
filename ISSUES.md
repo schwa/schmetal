@@ -7,15 +7,18 @@ File format: <https://github.com/schwa/issues-format>
 ## 1: Shader files import Schmetal rather than Metal
 
 +++
-status: open
+status: closed
 priority: low
 kind: enhancement
 labels: effort:s, area:language
 created: 2026-09-17T00:38:59Z
-updated: 2026-09-17T15:16:14Z
+updated: 2026-09-18T13:25:52Z
+closed: 2026-09-18T13:25:52Z
 +++
 
 Shader sources use import Schmetal rather than import Metal. The frontend currently strips that import and stages the shader alongside Prelude.swift. Metal names the host framework, whose API differs from shader-side Buffer and GridIndex. The desired shader module naming remains a language-design choice.
+
+- `2026-09-18T13:25:46Z`: Shader files now import MetalStdlib rather than Schmetal, mirroring MSL's metal_stdlib module. The remaining question is whether that module should become real (resolvable by SourceKit) rather than a staged prelude.
 
 ---
 

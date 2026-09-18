@@ -4,7 +4,7 @@ import Testing
 
 @Test func `explicit slots are reserved before automatic bindings`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     @compute
     func bindings(automatic: Buffer<Float>, @buffer(0) pinned: Buffer<Float>,
                   @buffer(3) scale: Float, output: Buffer<Float>, gid: GridIndex) {
@@ -32,7 +32,7 @@ import Testing
     "@compute func bad(@buffer(0x1e) first: Float, @buffer(30) second: Float) {}"
 ])
 func `invalid explicit buffer bindings are rejected`(source: String) throws {
-    try withShader("import Schmetal\n" + source) { path in
+    try withShader("import MetalStdlib\n" + source) { path in
         let ast = try TypedAST(path: path)
         #expect(throws: SchmetalError.self) {
             var emitter = Emitter(ast: ast)
@@ -44,7 +44,7 @@ func `invalid explicit buffer bindings are rejected`(source: String) throws {
 @Test(arguments: ["30", "0x1e", "0o36", "0b11110", "3_0"])
 func `highest supported explicit buffer slot compiles`(literal: String) throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     @compute func lastSlot(@buffer(\(literal)) output: Buffer<Float>, gid: GridIndex) { output[gid] = 1 }
     """) { path in
         var emitter = Emitter(ast: try TypedAST(path: path))
@@ -56,7 +56,7 @@ func `highest supported explicit buffer slot compiles`(literal: String) throws {
 
 @Test func `annotated structs become constant buffers`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     struct Uniforms { var scale: Float; var offset: Float }
     @compute func transform(input: Buffer<Float>, @buffer(3) uniforms: Uniforms,
                             output: Buffer<Float>, gid: GridIndex) {
@@ -77,7 +77,7 @@ func `highest supported explicit buffer slot compiles`(literal: String) throws {
 
 @Test func `stage inputs and uniform structs remain distinct`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     struct Varying { @position var position: Float4; var color: Float4 }
     struct Uniforms { var scale: Float }
     @fragment func fragmentMain(input: Varying, @buffer(2) uniforms: Uniforms) -> Float4 {
@@ -94,7 +94,7 @@ func `highest supported explicit buffer slot compiles`(literal: String) throws {
 
 @Test func `uniform wrappers are readonly but device buffers remain writable`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     struct Uniforms { var scale: Float }
     @compute func bad(@buffer(3) uniforms: Uniforms) { uniforms.scale = 2 }
     """) { path in
@@ -104,7 +104,7 @@ func `highest supported explicit buffer slot compiles`(literal: String) throws {
 
 @Test func `signed JSON literals retain their sign in emitted expressions`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     @compute func negative(output: Buffer<Float>, gid: GridIndex) {
         let value: Float = -2
         output[gid] = value + -1.5
@@ -120,7 +120,7 @@ func `highest supported explicit buffer slot compiles`(literal: String) throws {
 
 @Test func `automatic bindings reject resource count overflow`() throws {
     let parameters = (0..<32).map { "value\($0): Buffer<Float>" }.joined(separator: ", ")
-    try withShader("import Schmetal\n@compute func tooMany(\(parameters)) {}") { path in
+    try withShader("import MetalStdlib\n@compute func tooMany(\(parameters)) {}") { path in
         var emitter = Emitter(ast: try TypedAST(path: path))
         do {
             _ = try emitter.emit()

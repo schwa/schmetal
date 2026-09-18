@@ -10,8 +10,8 @@ enum ShaderLanguage {
     /// Module name the shader and prelude are compiled under.
     static let moduleName = "SchmetalShader"
 
-    /// Module name shaders `import`.
-    static let importName = "Schmetal"
+    /// Module name shaders `import`, mirroring MSL's `metal_stdlib`.
+    static let importName = "MetalStdlib"
 
     /// `Float4` → `SchmetalShader.Float4`.
     static func qualified(_ name: String) -> String { "\(moduleName).\(name)" }

@@ -150,14 +150,17 @@ Source locations use UTF-8 byte offsets, mapped back to the original shader path
 
 ## Layout
 
-- `Sources/schmetal/Prelude.swift` — the `Schmetal` module source swiftc type-checks against
-- `Sources/schmetal/TypedAST.swift` — frontend invocation and declaration registry
-- `Sources/schmetal/JSONASTDecoder.swift` — checked JSON AST normalization and source locations
-- `Sources/schmetal/DemangledSymbol.swift` — canonical type and declaration-owner decoding
-- `Sources/schmetal/LocalBindings.swift` — lexical local-reference resolution
-- `Sources/schmetal/Emitter.swift` — typed AST → MSL
-- `Sources/schmetal/BufferBindings.swift` — validated explicit and automatic slot allocation
-- `Sources/schmetal/MetalCompiler.swift` — `.metal` → `.metallib`
+- `Sources/Schmetal/ShaderCompiler.swift` — the compilation lifecycle callers use
+- `Sources/Schmetal/ShaderLanguage.swift` — the supported vocabulary and its Metal lowering
+- `Sources/Schmetal/Prelude.swift` — the `MetalStdlib` module source swiftc type-checks against
+- `Sources/Schmetal/TypedAST.swift` — frontend invocation and declaration registry
+- `Sources/Schmetal/JSONASTDecoder.swift` — checked JSON AST normalization and source locations
+- `Sources/Schmetal/DemangledSymbol.swift` — canonical type and declaration-owner decoding
+- `Sources/Schmetal/LocalBindings.swift` — lexical local-reference resolution
+- `Sources/Schmetal/Emitter.swift` — typed AST → MSL
+- `Sources/Schmetal/BufferBindings.swift` — validated explicit and automatic slot allocation
+- `Sources/Schmetal/MetalCompiler.swift` — `.metal` → `.metallib`
+- `Sources/schmetal-cli/CLI.swift` — argument parsing and printing
 
 No external dependencies; everything needed is in the Xcode toolchain.
 

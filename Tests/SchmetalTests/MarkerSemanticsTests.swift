@@ -4,7 +4,7 @@ import Testing
 
 @Test(arguments: ["compute", "vertex", "fragment"])
 func `stage actor names collide with function declarations`(name: String) throws {
-    try withShader("import Schmetal\nfunc \(name)() {}") { path in
+    try withShader("import MetalStdlib\nfunc \(name)() {}") { path in
         do {
             _ = try TypedAST(path: path)
             Issue.record("Expected marker name collision")
@@ -21,7 +21,7 @@ func `stage actor names collide with function declarations`(name: String) throws
 ])
 func `cross isolation calls are rejected`(calleeStage: String, callerStage: String) throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     @\(calleeStage) func isolatedValue() -> Float { 1 }
     \(callerStage) func caller() -> Float { isolatedValue() }
     """) { path in
@@ -36,7 +36,7 @@ func `cross isolation calls are rejected`(calleeStage: String, callerStage: Stri
 
 @Test func `same stage calls type check but entry point calls cannot lower`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     @compute func isolatedValue() -> Float { 1 }
     @compute func caller(output: Buffer<Float>, gid: GridIndex) { output[gid] = isolatedValue() }
     """) { path in
@@ -52,7 +52,7 @@ func `cross isolation calls are rejected`(calleeStage: String, callerStage: Stri
 
 @Test func `nonisolated helpers work from every stage`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     struct VertexResult { @position var position: Float4 }
     func helper(_ value: Float) -> Float { value + bias() }
     func bias() -> Float { 1 }
@@ -73,7 +73,7 @@ func `cross isolation calls are rejected`(calleeStage: String, callerStage: Stri
 
 @Test func `wrapper memberwise constructors accept wrapped values and reject wrapper objects`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     struct VertexResult { @position var position: Float4 }
     func bad(value: Float4) -> VertexResult { VertexResult(position: position(wrappedValue: value)) }
     """) { path in
@@ -88,7 +88,7 @@ func `cross isolation calls are rejected`(calleeStage: String, callerStage: Stri
 
 @Test func `default wrapped property initialization type checks but cannot lower`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     struct VertexResult { @position var position: Float4 = Float4(0, 0, 0, 1) }
     @vertex func vertexMain() -> VertexResult { VertexResult() }
     """) { path in
@@ -104,7 +104,7 @@ func `cross isolation calls are rejected`(calleeStage: String, callerStage: Stri
 
 @Test func `member by member wrapper initialization passes AST checking but not SIL initialization checks`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     struct VertexResult { @position var position: Float4; var tint: Float4 }
     @vertex func vertexMain() -> VertexResult {
         var result: VertexResult

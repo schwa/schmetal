@@ -1,6 +1,6 @@
 // A .schmetal shader: Swift syntax, Metal semantics.
 
-import Schmetal
+import MetalStdlib
 
 let scale: Float = 2.0
 

@@ -251,7 +251,7 @@ struct GPUIntegrationTests {
     @Test func `canonical types overloads and lexical shadowing execute correctly`() throws {
         let gpu = try GPUHarness()
         let library = try gpu.library(source: """
-        import Schmetal
+        import MetalStdlib
         typealias Scalar = Swift.Float
         typealias Storage<T> = Buffer<T>
         struct Float { var value: Scalar }
@@ -279,7 +279,7 @@ struct GPUIntegrationTests {
     @Test func `explicit and automatic bindings agree with host slots`() throws {
         let gpu = try GPUHarness()
         let library = try gpu.library(source: """
-        import Schmetal
+        import MetalStdlib
         @compute func bindSlots(automatic: Buffer<Float>, @buffer(0) pinned: Buffer<Float>,
                                 @buffer(3) scale: Float, output: Buffer<Float>, gid: GridIndex) {
             output[gid] = automatic[gid] + pinned[gid] * scale
@@ -301,7 +301,7 @@ struct GPUIntegrationTests {
     @Test func `uniform structs execute from sparse constant buffer slots`() throws {
         let gpu = try GPUHarness()
         let library = try gpu.library(source: """
-        import Schmetal
+        import MetalStdlib
         struct Uniforms { var scale: Float; var offset: Float }
         @compute func transform(@buffer(0) input: Buffer<Float>, @buffer(3) uniforms: Uniforms,
                                 @buffer(5) output: Buffer<Float>, gid: GridIndex) {
@@ -327,7 +327,7 @@ struct GPUIntegrationTests {
         let library: any MTLLibrary
         if useUniforms {
             library = try gpu.library(source: """
-            import Schmetal
+            import MetalStdlib
             struct VertexOut { @position var position: Float4 }
             struct Uniforms { var scale: Float; var tint: Float4 }
             @vertex func triangleVertex(vertexID: VertexIndex, @buffer(3) positions: Buffer<Float4>,

@@ -1,7 +1,7 @@
 // Vertex and fragment stages sharing a uniform struct, with interpolated and
 // flat stage-in members plus a Blinn-Phong style fragment shader.
 
-import Schmetal
+import MetalStdlib
 
 struct Uniforms {
     var lightDirection: Float3

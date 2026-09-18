@@ -13,7 +13,7 @@ private func withTemporaryShader(_ source: String, body: (String, String) throws
 }
 
 private let shader = """
-import Schmetal
+import MetalStdlib
 let scale: Float = 2.0
 @compute func scaleValues(input: Buffer<Float>, output: Buffer<Float>, gid: GridIndex) {
     output[gid] = input[gid] * scale
@@ -68,7 +68,7 @@ let scale: Float = 2.0
 }
 
 @Test func `compilation failures surface the shader path`() throws {
-    try withTemporaryShader("import Schmetal\nfunc bad() -> Float { \"text\" }\n") { path, directory in
+    try withTemporaryShader("import MetalStdlib\nfunc bad() -> Float { \"text\" }\n") { path, directory in
         #expect(throws: SchmetalError.self) { try ShaderCompiler().compile(shaderPath: path) }
         #expect(!FileManager.default.fileExists(atPath: directory + "/Generated/test.metal"))
     }

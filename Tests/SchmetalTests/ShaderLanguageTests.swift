@@ -31,7 +31,7 @@ private func advertisedIntrinsicCalls() -> [AdvertisedCall] {
 @Test(arguments: advertisedIntrinsicCalls())
 func `advertised intrinsics type check and compile`(call: AdvertisedCall) throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     @compute
     func use(output: Buffer<\(call.resultType)>, input: Buffer<\(call.type)>, gid: GridIndex) {
         output[gid] = \(call.expression)
@@ -57,7 +57,7 @@ func `advertised vector types construct and read components`(call: AdvertisedCal
     let vector = ShaderLanguage.vectorTypes.first { $0.name == call.type }!
     let reads = vector.components.map { "value.\($0)" }.joined(separator: " + ")
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     @compute
     func use(output: Buffer<\(vector.element == "Swift.Float" ? "Float" : "UInt32")>, gid: GridIndex) {
         let value = \(call.expression)

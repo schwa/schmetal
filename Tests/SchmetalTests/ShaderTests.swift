@@ -13,7 +13,7 @@ func withShader(_ source: String, body: (String) throws -> Void) throws {
 
 @Test func `buffer vector subscript and scalar multiplication compile`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     struct VertexOut {
         @position var position: Float4
         var color: Float4
@@ -43,7 +43,7 @@ func withShader(_ source: String, body: (String) throws -> Void) throws {
 
 @Test func `local types are inferred without annotations`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     @compute
     func infer(a: Buffer<Float>, out: Buffer<Float>, gid: GridIndex) {
         let doubled = a[gid] * 2.0
@@ -58,7 +58,7 @@ func withShader(_ source: String, body: (String) throws -> Void) throws {
 
 @Test func `global constant can be specialized`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     let scale: Float = 2.0
     @compute
     func scaled(out: Buffer<Float>, gid: GridIndex) { out[gid] = scale }
@@ -70,14 +70,14 @@ func withShader(_ source: String, body: (String) throws -> Void) throws {
 }
 
 @Test func `unknown shader type is rejected`() throws {
-    try withShader("import Schmetal\nfunc bad(value: MissingType) {}") { path in
+    try withShader("import MetalStdlib\nfunc bad(value: MissingType) {}") { path in
         #expect(throws: SchmetalError.self) { try TypedAST(path: path) }
     }
 }
 
 @Test func `vector buffer cannot be assigned to scalar`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     func bad(values: Buffer<Float4>) {
         var value: Float = 0.0
         value = values[0]
@@ -99,7 +99,7 @@ func withShader(_ source: String, body: (String) throws -> Void) throws {
 }
 
 @Test func `frontend failure keeps source context even in nonstrict mode`() throws {
-    try withShader("import Schmetal\nfunc bad(value: MissingType) {}") { path in
+    try withShader("import MetalStdlib\nfunc bad(value: MissingType) {}") { path in
         do {
             _ = try TypedAST(path: path, strict: false)
             Issue.record("Accepted a failed type check in nonstrict mode")
@@ -121,7 +121,7 @@ func `advertised floating point intrinsics compile to Metal`(type: String) throw
     let assignments = calls.map { "output[gid] = \($0)" }.joined(separator: "\n")
     let weightType = type.hasPrefix("Float") && type != "Float" ? "Float" : type
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     @compute
     func math(input: Buffer<\(type)>, output: Buffer<\(type)>, weight: \(weightType), gid: GridIndex) {
         let value = input[gid]
@@ -142,7 +142,7 @@ func `advertised floating point intrinsics compile to Metal`(type: String) throw
 @Test(arguments: ["Float2", "Float3", "Float4"])
 func `dot and vector weighted mix compile to Metal`(type: String) throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     @compute
     func vectorMath(input: Buffer<\(type)>, output: Buffer<\(type)>, scalar: Buffer<Float>, gid: GridIndex) {
         let value = input[gid]
@@ -163,7 +163,7 @@ func `dot and vector weighted mix compile to Metal`(type: String) throws {
 @Test(arguments: ["sqrt(true)", "pow(value, true)", "dot(value, value)", "sin(value, value)"])
 func `math intrinsic invalid arguments are rejected`(expression: String) throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     @compute
     func invalid(input: Buffer<Float>, output: Buffer<Float>, gid: GridIndex) {
         let value = input[gid]
@@ -187,7 +187,7 @@ func `math intrinsic invalid arguments are rejected`(expression: String) throws 
     "let first: Float = 1, second: Float = 2"
 ])
 func `unsupported declarations and callees are rejected before Metal emission`(source: String) throws {
-    try withShader("import Schmetal\n" + source) { path in
+    try withShader("import MetalStdlib\n" + source) { path in
         let ast = try TypedAST(path: path)
         #expect(throws: SchmetalError.self) {
             var emitter = Emitter(ast: ast)
@@ -198,7 +198,7 @@ func `unsupported declarations and callees are rejected before Metal emission`(s
 
 @Test func `helper overloads retain identity instead of becoming Metal intrinsics`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     @compute
     func entry(output: Buffer<Float>, gid: GridIndex) {
         output[gid] = sin(value: 1.0) + sin(other: 2.0) + sin(0.0)
@@ -219,7 +219,7 @@ func `unsupported declarations and callees are rejected before Metal emission`(s
 
 @Test func `supported constructors preserve declaration identity`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     struct Pair { var value: Float }
     @compute
     func construct(output: Buffer<Float4>, gid: GridIndex) {
@@ -238,7 +238,7 @@ func `unsupported declarations and callees are rejected before Metal emission`(s
 
 @Test func `boolean conditions retain every clause during lowering`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     @compute
     func conditional(input: Buffer<Float>, output: Buffer<Float>, gid: GridIndex) {
         let value = input[gid]
@@ -272,7 +272,7 @@ func `unsupported declarations and callees are rejected before Metal emission`(s
 ])
 func `control flow and scalar expressions compile to Metal`(body: String) throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     @compute
     func expressions(input: Buffer<Float>, output: Buffer<Float>, gid: GridIndex) {
         let value = input[gid]
@@ -292,7 +292,7 @@ func `control flow and scalar expressions compile to Metal`(body: String) throws
 
 @Test func `all advertised member attributes compile in stage structs`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     struct Vertex {
         @position var position: Float4
         @pointSize var size: Float
@@ -340,7 +340,7 @@ func `control flow and scalar expressions compile to Metal`(body: String) throws
     "struct Bad { @unknown var value: Float }"
 ])
 func `invalid shader language constructs fail type checking`(source: String) throws {
-    try withShader("import Schmetal\n" + source) { path in
+    try withShader("import MetalStdlib\n" + source) { path in
         #expect(throws: SchmetalError.self) { try TypedAST(path: path) }
     }
 }
@@ -352,7 +352,7 @@ func `invalid shader language constructs fail type checking`(source: String) thr
 ])
 func `advertised scalar and vector constructors compile`(type: String, expression: String) throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     @compute
     func construct(output: Buffer<\(type)>, gid: GridIndex) { output[gid] = \(expression) }
     """) { path in

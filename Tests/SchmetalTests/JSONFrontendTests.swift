@@ -11,7 +11,7 @@ import Testing
 
 @Test func `JSON source offsets preserve UTF8 columns and original shader paths`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     // 🧪
     func inspect(_ value: Float) -> Float { let café = value; return café }
     """) { path in
@@ -39,7 +39,7 @@ import Testing
 @Test func `unrecognized mangled types cannot become Metal scalar names`() throws {
     let symbols = try DemangledSymbol.load(["$sNotARealTypeD"])
     #expect(symbols["$sNotARealTypeD"]?.typeName == nil)
-    try withShader("import Schmetal\nfunc unsupported(_ value: Float?) {}") { path in
+    try withShader("import MetalStdlib\nfunc unsupported(_ value: Float?) {}") { path in
         let ast = try TypedAST(path: path)
         #expect(throws: SchmetalError.self) {
             var emitter = Emitter(ast: ast)
@@ -50,7 +50,7 @@ import Testing
 
 @Test func `aliases expose identical type identities while same named structs do not`() throws {
     try withShader("""
-    import Schmetal
+    import MetalStdlib
     typealias Scalar = Swift.Float
     struct Float { var value: Swift.Float }
     func inspect(_ a: Scalar, _ b: Swift.Float, _ c: Float) {}
