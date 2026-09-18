@@ -1,6 +1,6 @@
-// A .smetal shader: Swift syntax, Metal semantics.
+// A .schmetal shader: Swift syntax, Metal semantics.
 
-import SMetal
+import Schmetal
 
 let scale: Float = 2.0
 

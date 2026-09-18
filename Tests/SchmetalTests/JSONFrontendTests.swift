@@ -1,17 +1,17 @@
 import Foundation
 import Testing
-@testable import smetal
+@testable import schmetal
 
 @Test func `demangler distinguishes canonical scalar and generic identities`() throws {
-    let symbols = try DemangledSymbol.load(["$sSfD", "$s11SMetalProbe5FloatVD", "$s11SMetalProbe6BufferVySfGD"])
+    let symbols = try DemangledSymbol.load(["$sSfD", "$s13SchmetalProbe5FloatVD", "$s13SchmetalProbe6BufferVySfGD"])
     #expect(symbols["$sSfD"]?.typeName == "Swift.Float")
-    #expect(symbols["$s11SMetalProbe5FloatVD"]?.typeName == "SMetalProbe.Float")
-    #expect(symbols["$s11SMetalProbe6BufferVySfGD"]?.typeName == "SMetalProbe.Buffer<Swift.Float>")
+    #expect(symbols["$s13SchmetalProbe5FloatVD"]?.typeName == "SchmetalProbe.Float")
+    #expect(symbols["$s13SchmetalProbe6BufferVySfGD"]?.typeName == "SchmetalProbe.Buffer<Swift.Float>")
 }
 
 @Test func `JSON source offsets preserve UTF8 columns and original shader paths`() throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     // 🧪
     func inspect(_ value: Float) -> Float { let café = value; return café }
     """) { path in
@@ -28,10 +28,10 @@ import Testing
 
 @Test func `missing JSON expression children fail explicitly`() throws {
     let decoder = JSONASTDecoder(symbols: [:], file: "test.swift", source: [])
-    #expect(throws: SMetalError.self) {
+    #expect(throws: SchmetalError.self) {
         try decoder.decode(["_kind": "binary_expr", "type": "$sSfD"])
     }
-    #expect(throws: SMetalError.self) {
+    #expect(throws: SchmetalError.self) {
         try decoder.decode(["_kind": "integer_literal_expr"])
     }
 }
@@ -39,9 +39,9 @@ import Testing
 @Test func `unrecognized mangled types cannot become Metal scalar names`() throws {
     let symbols = try DemangledSymbol.load(["$sNotARealTypeD"])
     #expect(symbols["$sNotARealTypeD"]?.typeName == nil)
-    try withShader("import SMetal\nfunc unsupported(_ value: Float?) {}") { path in
+    try withShader("import Schmetal\nfunc unsupported(_ value: Float?) {}") { path in
         let ast = try TypedAST(path: path)
-        #expect(throws: SMetalError.self) {
+        #expect(throws: SchmetalError.self) {
             var emitter = Emitter(ast: ast)
             _ = try emitter.emit()
         }
@@ -50,7 +50,7 @@ import Testing
 
 @Test func `aliases expose identical type identities while same named structs do not`() throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     typealias Scalar = Swift.Float
     struct Float { var value: Swift.Float }
     func inspect(_ a: Scalar, _ b: Swift.Float, _ c: Float) {}
@@ -72,11 +72,11 @@ import Testing
         "range": ["start": 1, "end": 1, "buffer_id": "support.swift"]
     ]
     #expect(try decoder.decode(literal)["location"] == "support.swift:2:1")
-    #expect(throws: SMetalError.self) {
+    #expect(throws: SchmetalError.self) {
         try decoder.decode(["_kind": "integer_literal_expr", "value": "42",
                             "range": ["start": 100, "end": 100]])
     }
-    #expect(throws: SMetalError.self) {
+    #expect(throws: SchmetalError.self) {
         try decoder.decode(["_kind": "integer_literal_expr", "value": "42",
                             "range": ["start": 0, "end": 0, "buffer_id": "unknown"]])
     }

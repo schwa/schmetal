@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import smetal
+@testable import schmetal
 
 @Test func `large output on both streams completes without pipe backpressure`() throws {
     let output = try ToolProcess.run(
@@ -21,7 +21,7 @@ import Testing
             arguments: ["-c", "printf partial-AST; printf 'driver failure without source location' >&2; exit 7"]
         )
         Issue.record("Accepted a nonzero exit")
-    } catch let error as SMetalError {
+    } catch let error as SchmetalError {
         #expect(error.description.contains("exit status 7"))
         #expect(error.description.contains("partial-AST"))
         #expect(error.description.contains("driver failure without source location"))
@@ -32,7 +32,7 @@ import Testing
     do {
         _ = try ToolProcess.run(executable: URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", "kill -TERM $$"])
         Issue.record("Accepted signal termination")
-    } catch let error as SMetalError {
+    } catch let error as SchmetalError {
         #expect(error.description.contains("signal 15"))
     }
 }

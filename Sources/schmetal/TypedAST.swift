@@ -1,6 +1,6 @@
 import Foundation
 
-struct SMetalError: Error, CustomStringConvertible {
+struct SchmetalError: Error, CustomStringConvertible {
     var description: String
     init(_ description: String) { self.description = description }
 }
@@ -59,10 +59,10 @@ struct TypedAST {
             dump = try SwiftFrontend.dumpAST(
                 files: [staged.prelude.path, staged.shader.path], shaderName: staged.shader.lastPathComponent
             )
-        } catch let error as SMetalError {
-            throw SMetalError(error.description.replacing(staged.shader.path, with: path))
+        } catch let error as SchmetalError {
+            throw SchmetalError(error.description.replacing(staged.shader.path, with: path))
         }
-        guard let file = dump.shaderFile else { throw SMetalError("swiftc produced no AST for \(path)") }
+        guard let file = dump.shaderFile else { throw SchmetalError("swiftc produced no AST for \(path)") }
         symbols = dump.symbols
         var bindings = LocalBindings()
         func originalLocations(_ original: ASTNode) -> ASTNode {
@@ -99,11 +99,11 @@ enum SwiftFrontend {
             let output = try ToolProcess.run(
                 executable: URL(fileURLWithPath: "/usr/bin/xcrun"),
                 arguments: ["swiftc", "-frontend", "-dump-ast", "-dump-ast-format", "json", "-sdk", sdk,
-                            "-module-name", "SMetalShader", "-primary-file", file] + files.filter { $0 != file }
+                            "-module-name", "SchmetalShader", "-primary-file", file] + files.filter { $0 != file }
             )
             let decoded = try JSONSerialization.jsonObject(with: Data(output.standardOutput.utf8))
             guard let object = decoded as? [String: Any], object["_kind"] as? String == "source_file" else {
-                throw SMetalError("expected a JSON source_file from swiftc")
+                throw SchmetalError("expected a JSON source_file from swiftc")
             }
             objects.append(object)
         }

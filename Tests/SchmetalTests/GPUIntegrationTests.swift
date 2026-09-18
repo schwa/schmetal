@@ -1,7 +1,7 @@
 import Foundation
 import Metal
 import Testing
-@testable import smetal
+@testable import schmetal
 
 private struct GPUHarness {
     let device: any MTLDevice
@@ -15,15 +15,15 @@ private struct GPUHarness {
     func library(example: String, specializations: [String: String] = [:]) throws -> any MTLLibrary {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
-        let source = try String(contentsOf: root.appending(path: "Examples/\(example).smetal"), encoding: .utf8)
+        let source = try String(contentsOf: root.appending(path: "Examples/\(example).schmetal"), encoding: .utf8)
         return try library(source: source, specializations: specializations)
     }
 
     func library(source: String, specializations: [String: String]) throws -> any MTLLibrary {
-        let directory = FileManager.default.temporaryDirectory.appending(path: "smetal-gpu-\(UUID().uuidString)")
+        let directory = FileManager.default.temporaryDirectory.appending(path: "schmetal-gpu-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let sourcePath = directory.appending(path: "Shader.smetal")
+        let sourcePath = directory.appending(path: "Shader.schmetal")
         try source.write(to: sourcePath, atomically: true, encoding: .utf8)
         var emitter = Emitter(ast: try TypedAST(path: sourcePath.path), specializations: specializations)
         let metal = try emitter.emit()
@@ -138,7 +138,7 @@ struct GPUIntegrationTests {
     @Test func `canonical types overloads and lexical shadowing execute correctly`() throws {
         let gpu = try GPUHarness()
         let library = try gpu.library(source: """
-        import SMetal
+        import Schmetal
         typealias Scalar = Swift.Float
         typealias Storage<T> = Buffer<T>
         struct Float { var value: Scalar }
@@ -166,7 +166,7 @@ struct GPUIntegrationTests {
     @Test func `explicit and automatic bindings agree with host slots`() throws {
         let gpu = try GPUHarness()
         let library = try gpu.library(source: """
-        import SMetal
+        import Schmetal
         @compute func bindSlots(automatic: Buffer<Float>, @buffer(0) pinned: Buffer<Float>,
                                 @buffer(3) scale: Float, output: Buffer<Float>, gid: GridIndex) {
             output[gid] = automatic[gid] + pinned[gid] * scale
@@ -188,7 +188,7 @@ struct GPUIntegrationTests {
     @Test func `uniform structs execute from sparse constant buffer slots`() throws {
         let gpu = try GPUHarness()
         let library = try gpu.library(source: """
-        import SMetal
+        import Schmetal
         struct Uniforms { var scale: Float; var offset: Float }
         @compute func transform(@buffer(0) input: Buffer<Float>, @buffer(3) uniforms: Uniforms,
                                 @buffer(5) output: Buffer<Float>, gid: GridIndex) {
@@ -214,7 +214,7 @@ struct GPUIntegrationTests {
         let library: any MTLLibrary
         if useUniforms {
             library = try gpu.library(source: """
-            import SMetal
+            import Schmetal
             struct VertexOut { @position var position: Float4 }
             struct Uniforms { var scale: Float; var tint: Float4 }
             @vertex func triangleVertex(vertexID: VertexIndex, @buffer(3) positions: Buffer<Float4>,

@@ -7,7 +7,7 @@ struct ToolProcess {
     }
 
     static func run(executable: URL, arguments: [String]) throws -> Output {
-        let directory = FileManager.default.temporaryDirectory.appending(path: "smetal-process-\(UUID().uuidString)")
+        let directory = FileManager.default.temporaryDirectory.appending(path: "schmetal-process-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -39,7 +39,7 @@ struct ToolProcess {
         guard process.terminationReason == .exit, process.terminationStatus == 0 else {
             let reason = process.terminationReason == .exit ? "exit status" : "signal"
             let command = ([executable.path] + arguments).joined(separator: " ")
-            throw SMetalError("""
+            throw SchmetalError("""
             \(command) failed (\(reason) \(process.terminationStatus)):
             \(output.standardOutput)
             \(output.standardError)

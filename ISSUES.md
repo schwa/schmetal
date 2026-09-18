@@ -4,7 +4,7 @@ File format: <https://github.com/schwa/issues-format>
 
 ---
 
-## 1: Shader files import SMetal rather than Metal
+## 1: Shader files import Schmetal rather than Metal
 
 +++
 status: open
@@ -15,7 +15,7 @@ created: 2026-09-17T00:38:59Z
 updated: 2026-09-17T15:16:14Z
 +++
 
-Shader sources use import SMetal rather than import Metal. The frontend currently strips that import and stages the shader alongside Prelude.swift. Metal names the host framework, whose API differs from shader-side Buffer and GridIndex. The desired shader module naming remains a language-design choice.
+Shader sources use import Schmetal rather than import Metal. The frontend currently strips that import and stages the shader alongside Prelude.swift. Metal names the host framework, whose API differs from shader-side Buffer and GridIndex. The desired shader module naming remains a language-design choice.
 
 ---
 
@@ -202,7 +202,7 @@ created: 2026-09-17T00:41:30Z
 updated: 2026-09-17T15:16:14Z
 +++
 
-Errors from 'xcrun metal' reference the generated .metal line numbers, not the .smetal source. Users have to open the generated file to map the error back.
+Errors from 'xcrun metal' reference the generated .metal line numbers, not the .schmetal source. Users have to open the generated file to map the error back.
 
 ---
 
@@ -235,7 +235,7 @@ created: 2026-09-17T00:41:30Z
 updated: 2026-09-17T15:16:14Z
 +++
 
-'-D name=value' substitutes the raw string into the generated constant. A value that does not parse as the declared type is not reported by smetal and only fails in metal.
+'-D name=value' substitutes the raw string into the generated constant. A value that does not parse as the declared type is not reported by schmetal and only fails in metal.
 
 ---
 
@@ -270,8 +270,8 @@ The emitter now consumes swiftc type strings instead of source tokens, but metal
 
 \- `2026-09-17T15:16:26Z`: Related: #20 covers declaration identity for calls/operators; #17 covers keeping prelude definitions and Metal mappings aligned.
 \- `2026-09-17T15:19:12Z`: Related architecture task #24 explores hiding compiler-dump details behind a semantic boundary; this issue retains the concrete type-identity problem.
-\- `2026-09-17T15:25:22Z`: Reproduced with a regression test: typealias Scalar = Swift.Float used in Buffer<Scalar> and an annotated local fails with unsupported top-level declaration: typealias. Restored the temporary failing test after investigation. With Swift 6.4, text AST parameter/local types retain Scalar; the alias underlying type is printed as Float. A standalone JSON dump instead exposes mangled type references ($sSfD for Swift.Float) and declaration USRs. JSON still has no schema stability guarantee. Punting: alias-name substitution alone does not satisfy the canonical-identity scope, and choosing a new identity representation/source crosses into the unselected #24 frontend design. Concrete unblocker: approve JSON type-reference/USR ingestion for identity, or explicitly narrow this ticket to non-generic alias and qualified-spelling support on the current text AST. Repro: import SMetal; typealias Scalar = Swift.Float; @compute func copy(input: Buffer<Scalar>, output: Buffer<Scalar>, gid: GridIndex) { let value: Scalar = input[gid]; output[gid] = value }. No source changes retained.
-\- `2026-09-17T16:27:14Z`: Investigation update (Apple Swift 6.4, swiftlang-6.4.0.34.1): JSON provides canonical type identities and structured declaration references, not merely easier syntax. Verified Scalar = Swift.Float and alias chains canonicalize to $sSfD; Storage<Chained> and Buffer<Scalar> share $s11SMetalProbe6BufferVySfGD. Text prints both Swift.Float and a user struct Float as Float, whereas JSON distinguishes $sSfD from $s11SMetalProbe5FloatVD. Nested nominal types and SIMD aliases also retain distinct/canonical identities. Overloaded calls have decl_usr values matching their declarations. Generic references expose structured substitutions; expression type is instantiated, while decl.type_usr can remain generic.
+\- `2026-09-17T15:25:22Z`: Reproduced with a regression test: typealias Scalar = Swift.Float used in Buffer<Scalar> and an annotated local fails with unsupported top-level declaration: typealias. Restored the temporary failing test after investigation. With Swift 6.4, text AST parameter/local types retain Scalar; the alias underlying type is printed as Float. A standalone JSON dump instead exposes mangled type references ($sSfD for Swift.Float) and declaration USRs. JSON still has no schema stability guarantee. Punting: alias-name substitution alone does not satisfy the canonical-identity scope, and choosing a new identity representation/source crosses into the unselected #24 frontend design. Concrete unblocker: approve JSON type-reference/USR ingestion for identity, or explicitly narrow this ticket to non-generic alias and qualified-spelling support on the current text AST. Repro: import Schmetal; typealias Scalar = Swift.Float; @compute func copy(input: Buffer<Scalar>, output: Buffer<Scalar>, gid: GridIndex) { let value: Scalar = input[gid]; output[gid] = value }. No source changes retained.
+\- `2026-09-17T16:27:14Z`: Investigation update (Apple Swift 6.4, swiftlang-6.4.0.34.1): JSON provides canonical type identities and structured declaration references, not merely easier syntax. Verified Scalar = Swift.Float and alias chains canonicalize to $sSfD; Storage<Chained> and Buffer<Scalar> share $s13SchmetalProbe6BufferVySfGD. Text prints both Swift.Float and a user struct Float as Float, whereas JSON distinguishes $sSfD from $s13SchmetalProbe5FloatVD. Nested nominal types and SIMD aliases also retain distinct/canonical identities. Overloaded calls have decl_usr values matching their declarations. Generic references expose structured substitutions; expression type is instantiated, while decl.type_usr can remain generic.
 
 Recommended implementation direction: JSON alone for compilation; text dumps only as an optional debugging output. Do not merge two AST formats. This is justified by identity information, not a stability guarantee. Neither dump schema is guaranteed stable across compiler versions.
 
@@ -279,7 +279,7 @@ Required adapter work: decode canonical mangled type identities for the supporte
 
 Source ranges are UTF-8 byte offsets; end offsets point at the final token start, not its exclusive end. Preserve source bytes for diagnostic mapping. Unicode probes confirmed this. Original initializer nodes can have empty types even on successful compilation.
 
-Invocation findings: one-file driver invocations emit AST on stdout; multi-file driver invocations emit concatenated AST documents on stderr. Failed invocations can still emit partial ASTs and mix diagnostics into multi-file output. Check exit status before parsing. A tested alternative is swiftc -frontend -dump-ast -dump-ast-format json -sdk <xcrun --show-sdk-path> -module-name SMetalProbe -primary-file Shader.swift Support.swift: one primary-file JSON document on stdout with diagnostics on stderr. It needs explicit SDK setup and omits the supporting files top-level AST. Valid adjacent JSON documents can be parsed as a sequence; no handwritten S-expression grammar is necessary.
+Invocation findings: one-file driver invocations emit AST on stdout; multi-file driver invocations emit concatenated AST documents on stderr. Failed invocations can still emit partial ASTs and mix diagnostics into multi-file output. Check exit status before parsing. A tested alternative is swiftc -frontend -dump-ast -dump-ast-format json -sdk <xcrun --show-sdk-path> -module-name SchmetalProbe -primary-file Shader.swift Support.swift: one primary-file JSON document on stdout with diagnostics on stderr. It needs explicit SDK setup and omits the supporting files top-level AST. Valid adjacent JSON documents can be parsed as a sequence; no handwritten S-expression grammar is necessary.
 
 Demangling probes: swift-demangle --expand exposes nominal/generic/optional/tuple/metatype/function structure. Pretty output is insufficient: the generic function type $syxxcluD produced a tree but its pretty result fell back to the mangled string. A tested type adapter is still needed; parser replacement alone does not complete #16.
 
@@ -287,7 +287,7 @@ Acceptance coverage: aliases and chains; generic aliases; qualified types; disti
 
 Source evidence, pinned upstream revision e53ecb99609179c7ae55c3e1eb115fc98266c2af (not claimed to be the exact Apple build source): https://github.com/swiftlang/swift/blob/e53ecb99609179c7ae55c3e1eb115fc98266c2af/lib/AST/ASTDumper.cpp#L1795-L1866 documents structured references and type USRs; https://github.com/swiftlang/swift/blob/e53ecb99609179c7ae55c3e1eb115fc98266c2af/lib/AST/USRGeneration.cpp#L38-L44 explicitly calls getCanonicalType()->getRValueType(). ASTDumper.cpp lines 203-299 explain potentially empty USRs and lossy archetype normalization; lines 1040-1087 explain offsets and context IDs; lines 1963-1975 explain omitted type syntax.
 
-Full local report and reproducible probes: /tmp/smetal-ast-audit/REPORT.md (temporary; essential findings preserved in this comment). Related #18 remains parser/compatibility coverage, not a claim that JSON is stable. No compiler implementation changed during this investigation.
+Full local report and reproducible probes: /tmp/schmetal-ast-audit/REPORT.md (temporary; essential findings preserved in this comment). Related #18 remains parser/compatibility coverage, not a claim that JSON is stable. No compiler implementation changed during this investigation.
 
 - `2026-09-17T17:15:19Z`: Implemented in the working copy (not committed yet): compilation now uses JSON-only primary-file frontend invocations with explicit SDK setup. Removed SExpressionParser. Canonical type USRs are preserved and decoded through batched swift-demangle trees; declaration references use USR registry entries and decoded owners. Aliases, alias chains, generic aliases, qualified names, nested nominal types, and user Float versus Swift.Float now lower correctly. Prelude scalar names are Swift-qualified to prevent source shadowing. Local bindings use lexical scopes and rename shadows; source ranges preserve UTF-8 offsets and map to the original path. Unsupported type identities and malformed required JSON shapes fail explicitly. Existing operator/helper/constructor/member checks were migrated to identities, not old printed reference strings. Red regressions reproduced alias rejection, nested-type rejection, scalar-name collision, and shadow-initializer capture before the implementation. xcb build and all 42 tests now pass, including an actual GPU test combining aliases, same-spelling nominal types, overloads, and local shadowing. Both example metallibs and CLI dump work. New adapter/test files pass lint. README documents the remaining JSON schema and demangler-output version dependency. Awaiting commit; issue left Open until the fix is committed.
 - `2026-09-17T17:18:31Z`: Committed implementation replaces text AST parsing with JSON-only frontend ingestion, canonical type decoding, USR declaration matching, and lexical local binding. Build and all 42 tests pass, including GPU identity/alias/shadowing coverage; both examples compile to metallib.

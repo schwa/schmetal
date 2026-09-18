@@ -64,13 +64,13 @@ struct DemangledSymbol {
                 arguments: ["swift-demangle", "--expand", "--tree-only"] + mangled
             )
             let sections = output.standardOutput.components(separatedBy: "Demangling for ").dropFirst()
-            guard sections.count == batch.count else { throw SMetalError("unexpected swift-demangle output") }
+            guard sections.count == batch.count else { throw SchmetalError("unexpected swift-demangle output") }
             for (identity, section) in zip(batch, sections) {
                 let lines = section.split(separator: "\n").dropFirst().filter { $0.contains("kind=") }
                 var index = 0
                 let rows = lines.map(String.init)
                 if !rows.isEmpty { result[identity] = try parse(rows, index: &index, depth: 0) }
-                guard index == rows.count else { throw SMetalError("malformed demangled symbol tree") }
+                guard index == rows.count else { throw SchmetalError("malformed demangled symbol tree") }
             }
         }
         return result
@@ -79,10 +79,10 @@ struct DemangledSymbol {
     private static func parse(_ rows: [String], index: inout Int, depth: Int) throws -> DemangledSymbol {
         let line = rows[index]
         guard line.prefix(while: { $0 == " " }).count == depth else {
-            throw SMetalError("unexpected demangler indentation")
+            throw SchmetalError("unexpected demangler indentation")
         }
         let content = String(line.dropFirst(depth))
-        guard content.hasPrefix("kind=") else { throw SMetalError("missing demangler node kind") }
+        guard content.hasPrefix("kind=") else { throw SchmetalError("missing demangler node kind") }
         let kind = String(content.dropFirst(5).prefix { $0 != "," })
         var text: String?
         if let range = content.range(of: ", text=") {

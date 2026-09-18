@@ -1,14 +1,14 @@
 import Foundation
 import Testing
-@testable import smetal
+@testable import schmetal
 
 @Test(arguments: ["compute", "vertex", "fragment"])
 func `stage actor names collide with function declarations`(name: String) throws {
-    try withShader("import SMetal\nfunc \(name)() {}") { path in
+    try withShader("import Schmetal\nfunc \(name)() {}") { path in
         do {
             _ = try TypedAST(path: path)
             Issue.record("Expected marker name collision")
-        } catch let error as SMetalError {
+        } catch let error as SchmetalError {
             #expect(error.description.contains("invalid redeclaration"))
         }
     }
@@ -21,14 +21,14 @@ func `stage actor names collide with function declarations`(name: String) throws
 ])
 func `cross isolation calls are rejected`(calleeStage: String, callerStage: String) throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     @\(calleeStage) func isolatedValue() -> Float { 1 }
     \(callerStage) func caller() -> Float { isolatedValue() }
     """) { path in
         do {
             _ = try TypedAST(path: path)
             Issue.record("Expected isolation diagnostic")
-        } catch let error as SMetalError {
+        } catch let error as SchmetalError {
             #expect(error.description.contains("actor-isolated"))
         }
     }
@@ -36,7 +36,7 @@ func `cross isolation calls are rejected`(calleeStage: String, callerStage: Stri
 
 @Test func `same stage calls type check but entry point calls cannot lower`() throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     @compute func isolatedValue() -> Float { 1 }
     @compute func caller(output: Buffer<Float>, gid: GridIndex) { output[gid] = isolatedValue() }
     """) { path in
@@ -44,7 +44,7 @@ func `cross isolation calls are rejected`(calleeStage: String, callerStage: Stri
         do {
             _ = try emitter.emit()
             Issue.record("Expected entry point call rejection")
-        } catch let error as SMetalError {
+        } catch let error as SchmetalError {
             #expect(error.description.contains("only direct calls to supported declarations are allowed"))
         }
     }
@@ -52,7 +52,7 @@ func `cross isolation calls are rejected`(calleeStage: String, callerStage: Stri
 
 @Test func `nonisolated helpers work from every stage`() throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     struct VertexResult { @position var position: Float4 }
     func helper(_ value: Float) -> Float { value + bias() }
     func bias() -> Float { 1 }
@@ -73,14 +73,14 @@ func `cross isolation calls are rejected`(calleeStage: String, callerStage: Stri
 
 @Test func `wrapper memberwise constructors accept wrapped values and reject wrapper objects`() throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     struct VertexResult { @position var position: Float4 }
     func bad(value: Float4) -> VertexResult { VertexResult(position: position(wrappedValue: value)) }
     """) { path in
         do {
             _ = try TypedAST(path: path)
             Issue.record("Expected wrapper argument type rejection")
-        } catch let error as SMetalError {
+        } catch let error as SchmetalError {
             #expect(error.description.contains("cannot convert value"))
         }
     }
@@ -88,7 +88,7 @@ func `cross isolation calls are rejected`(calleeStage: String, callerStage: Stri
 
 @Test func `default wrapped property initialization type checks but cannot lower`() throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     struct VertexResult { @position var position: Float4 = Float4(0, 0, 0, 1) }
     @vertex func vertexMain() -> VertexResult { VertexResult() }
     """) { path in
@@ -96,7 +96,7 @@ func `cross isolation calls are rejected`(calleeStage: String, callerStage: Stri
         do {
             _ = try emitter.emit()
             Issue.record("Expected default argument rejection")
-        } catch let error as SMetalError {
+        } catch let error as SchmetalError {
             #expect(error.description.contains("stored property initializers are unsupported"))
         }
     }
@@ -104,7 +104,7 @@ func `cross isolation calls are rejected`(calleeStage: String, callerStage: Stri
 
 @Test func `member by member wrapper initialization passes AST checking but not SIL initialization checks`() throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     struct VertexResult { @position var position: Float4; var tint: Float4 }
     @vertex func vertexMain() -> VertexResult {
         var result: VertexResult
@@ -121,12 +121,12 @@ func `cross isolation calls are rejected`(calleeStage: String, callerStage: Stri
         do {
             _ = try ToolProcess.run(
                 executable: URL(fileURLWithPath: "/usr/bin/xcrun"),
-                arguments: ["swiftc", "-emit-sil", "-wmo", "-module-name", "SMetalShader",
+                arguments: ["swiftc", "-emit-sil", "-wmo", "-module-name", "SchmetalShader",
                             staged.prelude.path, staged.shader.path,
                             "-o", staged.directory.appending(path: "test.sil").path]
             )
             Issue.record("Expected definite initialization diagnostic")
-        } catch let error as SMetalError {
+        } catch let error as SchmetalError {
             #expect(error.description.contains("before being initialized"))
         }
     }

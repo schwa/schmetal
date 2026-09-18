@@ -31,7 +31,7 @@ struct LocalBindings {
         var emitted = name
         if environment[name] != nil {
             repeat {
-                emitted = "smetal_local_\(nextID)"
+                emitted = "schmetal_local_\(nextID)"
                 nextID += 1
             } while usedNames.contains(emitted)
             usedNames.insert(emitted)
@@ -52,7 +52,7 @@ struct LocalBindings {
             if let name = node.name, let emitted = environment[name] { node.fields["name"] = emitted }
         case "declref_expr" where node["decl"] == "":
             guard let name = node.declBaseName, let emitted = environment[name] else {
-                throw SMetalError("unresolved local reference: \(node.declBaseName ?? "unknown")")
+                throw SchmetalError("unresolved local reference: \(node.declBaseName ?? "unknown")")
             }
             node.fields["decl_name"] = emitted
         default:

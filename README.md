@@ -1,11 +1,11 @@
-# smetal
+# schmetal
 
-Proof of concept: a shading language written in Swift syntax (`.smetal`), type-checked by
+Proof of concept: a shading language written in Swift syntax (`.schmetal`), type-checked by
 `swiftc` itself, translated to specialized `.metal` source, and compiled to `.metallib`
 with `xcrun metal` / `metallib`.
 
 ```
-.smetal --swiftc JSON AST--> canonical nodes --emitter--> .metal --metal--> .air --metallib--> .metallib
+.schmetal --swiftc JSON AST--> canonical nodes --emitter--> .metal --metal--> .air --metallib--> .metallib
 ```
 
 The shader is compiled as ordinary Swift against a generated prelude, so name resolution,
@@ -16,10 +16,10 @@ approximation of them.
 
 ```fish
 xcb build
-xcb run -- build Examples/add.smetal              # → add.metal + add.metallib
-xcb run -- build Examples/add.smetal -D scale=8.0 # specialize a global constant
-xcb run -- build Examples/add.smetal --emit-metal # stop after .metal
-xcb run -- dump Examples/add.smetal              # print the normalized typed AST
+xcb run -- build Examples/add.schmetal              # → add.metal + add.metallib
+xcb run -- build Examples/add.schmetal -D scale=8.0 # specialize a global constant
+xcb run -- build Examples/add.schmetal --emit-metal # stop after .metal
+xcb run -- dump Examples/add.schmetal              # print the normalized typed AST
 ```
 
 ## Tests
@@ -122,14 +122,14 @@ Source locations use UTF-8 byte offsets, mapped back to the original shader path
 
 ## Layout
 
-- `Sources/smetal/Prelude.swift` — the `SMetal` module source swiftc type-checks against
-- `Sources/smetal/TypedAST.swift` — frontend invocation and declaration registry
-- `Sources/smetal/JSONASTDecoder.swift` — checked JSON AST normalization and source locations
-- `Sources/smetal/DemangledSymbol.swift` — canonical type and declaration-owner decoding
-- `Sources/smetal/LocalBindings.swift` — lexical local-reference resolution
-- `Sources/smetal/Emitter.swift` — typed AST → MSL
-- `Sources/smetal/BufferBindings.swift` — validated explicit and automatic slot allocation
-- `Sources/smetal/MetalCompiler.swift` — `.metal` → `.metallib`
+- `Sources/schmetal/Prelude.swift` — the `Schmetal` module source swiftc type-checks against
+- `Sources/schmetal/TypedAST.swift` — frontend invocation and declaration registry
+- `Sources/schmetal/JSONASTDecoder.swift` — checked JSON AST normalization and source locations
+- `Sources/schmetal/DemangledSymbol.swift` — canonical type and declaration-owner decoding
+- `Sources/schmetal/LocalBindings.swift` — lexical local-reference resolution
+- `Sources/schmetal/Emitter.swift` — typed AST → MSL
+- `Sources/schmetal/BufferBindings.swift` — validated explicit and automatic slot allocation
+- `Sources/schmetal/MetalCompiler.swift` — `.metal` → `.metallib`
 
 No external dependencies; everything needed is in the Xcode toolchain.
 

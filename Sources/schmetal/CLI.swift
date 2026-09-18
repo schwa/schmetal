@@ -6,18 +6,18 @@ struct CLI {
         do {
             try run(arguments: Array(CommandLine.arguments.dropFirst()))
         } catch {
-            FileHandle.standardError.write(Data("smetal: \(error)\n".utf8))
+            FileHandle.standardError.write(Data("schmetal: \(error)\n".utf8))
             exit(1)
         }
     }
 
     static func usage() -> Never {
         print("""
-        smetal — compile .smetal (Swift-flavoured shaders) to .metallib
+        schmetal — compile .schmetal (Swift-flavoured shaders) to .metallib
 
         usage:
-          smetal build <file.smetal> [-o out.metallib] [-D name=value ...] [--emit-metal]
-          smetal dump  <file.smetal>
+          schmetal build <file.schmetal> [-o out.metallib] [-D name=value ...] [--emit-metal]
+          schmetal dump  <file.schmetal>
         """)
         exit(1)
     }
@@ -56,7 +56,7 @@ struct CLI {
             case "-D":
                 index += 1
                 let pair = arguments[index].split(separator: "=", maxSplits: 1)
-                guard pair.count == 2 else { throw SMetalError("bad -D, expected name=value") }
+                guard pair.count == 2 else { throw SchmetalError("bad -D, expected name=value") }
                 specializations[String(pair[0])] = String(pair[1])
             case "--emit-metal":
                 emitMetalOnly = true

@@ -1,19 +1,19 @@
 import Foundation
 import Testing
-@testable import smetal
+@testable import schmetal
 
 func withShader(_ source: String, body: (String) throws -> Void) throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }
-    let file = directory.appending(path: "test.smetal")
+    let file = directory.appending(path: "test.schmetal")
     try source.write(to: file, atomically: true, encoding: .utf8)
     try body(file.path)
 }
 
 @Test func `buffer vector subscript and scalar multiplication compile`() throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     struct VertexOut {
         @position var position: Float4
         var color: Float4
@@ -43,7 +43,7 @@ func withShader(_ source: String, body: (String) throws -> Void) throws {
 
 @Test func `local types are inferred without annotations`() throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     @compute
     func infer(a: Buffer<Float>, out: Buffer<Float>, gid: GridIndex) {
         let doubled = a[gid] * 2.0
@@ -58,7 +58,7 @@ func withShader(_ source: String, body: (String) throws -> Void) throws {
 
 @Test func `global constant can be specialized`() throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     let scale: Float = 2.0
     @compute
     func scaled(out: Buffer<Float>, gid: GridIndex) { out[gid] = scale }
@@ -70,40 +70,40 @@ func withShader(_ source: String, body: (String) throws -> Void) throws {
 }
 
 @Test func `unknown shader type is rejected`() throws {
-    try withShader("import SMetal\nfunc bad(value: MissingType) {}") { path in
-        #expect(throws: SMetalError.self) { try TypedAST(path: path) }
+    try withShader("import Schmetal\nfunc bad(value: MissingType) {}") { path in
+        #expect(throws: SchmetalError.self) { try TypedAST(path: path) }
     }
 }
 
 @Test func `vector buffer cannot be assigned to scalar`() throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     func bad(values: Buffer<Float4>) {
         var value: Float = 0.0
         value = values[0]
     }
     """) { path in
-        #expect(throws: SMetalError.self) { try TypedAST(path: path) }
+        #expect(throws: SchmetalError.self) { try TypedAST(path: path) }
     }
 }
 
 @Test func `frontend rejects driver failures without source locations`() throws {
-    let missing = "/tmp/smetal-missing-\(UUID().uuidString).swift"
+    let missing = "/tmp/schmetal-missing-\(UUID().uuidString).swift"
     do {
         _ = try SwiftFrontend.dumpAST(files: [missing], shaderName: "missing.swift")
         Issue.record("Frontend accepted a failed compiler invocation")
-    } catch let error as SMetalError {
+    } catch let error as SchmetalError {
         #expect(error.description.contains(missing))
         #expect(error.description.contains("error:"))
     }
 }
 
 @Test func `frontend failure keeps source context even in nonstrict mode`() throws {
-    try withShader("import SMetal\nfunc bad(value: MissingType) {}") { path in
+    try withShader("import Schmetal\nfunc bad(value: MissingType) {}") { path in
         do {
             _ = try TypedAST(path: path, strict: false)
             Issue.record("Accepted a failed type check in nonstrict mode")
-        } catch let error as SMetalError {
+        } catch let error as SchmetalError {
             #expect(error.description.contains("\(path):2:"))
             #expect(error.description.contains("MissingType"))
             #expect(error.description.contains("func bad(value: MissingType) {}"))
@@ -121,7 +121,7 @@ func `advertised floating point intrinsics compile to Metal`(type: String) throw
     let assignments = calls.map { "output[gid] = \($0)" }.joined(separator: "\n")
     let weightType = type.hasPrefix("Float") && type != "Float" ? "Float" : type
     try withShader("""
-    import SMetal
+    import Schmetal
     @compute
     func math(input: Buffer<\(type)>, output: Buffer<\(type)>, weight: \(weightType), gid: GridIndex) {
         let value = input[gid]
@@ -142,7 +142,7 @@ func `advertised floating point intrinsics compile to Metal`(type: String) throw
 @Test(arguments: ["Float2", "Float3", "Float4"])
 func `dot and vector weighted mix compile to Metal`(type: String) throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     @compute
     func vectorMath(input: Buffer<\(type)>, output: Buffer<\(type)>, scalar: Buffer<Float>, gid: GridIndex) {
         let value = input[gid]
@@ -163,14 +163,14 @@ func `dot and vector weighted mix compile to Metal`(type: String) throws {
 @Test(arguments: ["sqrt(true)", "pow(value, true)", "dot(value, value)", "sin(value, value)"])
 func `math intrinsic invalid arguments are rejected`(expression: String) throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     @compute
     func invalid(input: Buffer<Float>, output: Buffer<Float>, gid: GridIndex) {
         let value = input[gid]
         output[gid] = \(expression)
     }
     """) { path in
-        #expect(throws: SMetalError.self) { try TypedAST(path: path) }
+        #expect(throws: SchmetalError.self) { try TypedAST(path: path) }
     }
 }
 
@@ -187,9 +187,9 @@ func `math intrinsic invalid arguments are rejected`(expression: String) throws 
     "let first: Float = 1, second: Float = 2"
 ])
 func `unsupported declarations and callees are rejected before Metal emission`(source: String) throws {
-    try withShader("import SMetal\n" + source) { path in
+    try withShader("import Schmetal\n" + source) { path in
         let ast = try TypedAST(path: path)
-        #expect(throws: SMetalError.self) {
+        #expect(throws: SchmetalError.self) {
             var emitter = Emitter(ast: ast)
             _ = try emitter.emit()
         }
@@ -198,7 +198,7 @@ func `unsupported declarations and callees are rejected before Metal emission`(s
 
 @Test func `helper overloads retain identity instead of becoming Metal intrinsics`() throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     @compute
     func entry(output: Buffer<Float>, gid: GridIndex) {
         output[gid] = sin(value: 1.0) + sin(other: 2.0) + sin(0.0)
@@ -208,8 +208,8 @@ func `unsupported declarations and callees are rejected before Metal emission`(s
     """) { path in
         var emitter = Emitter(ast: try TypedAST(path: path))
         let metal = try emitter.emit()
-        #expect(metal.contains("smetal_helper_1(1.0)"))
-        #expect(metal.contains("smetal_helper_2(2.0)"))
+        #expect(metal.contains("schmetal_helper_1(1.0)"))
+        #expect(metal.contains("schmetal_helper_2(2.0)"))
         #expect(metal.contains("sin(0.0)"))
         let metalPath = path + ".metal"
         try metal.write(toFile: metalPath, atomically: true, encoding: .utf8)
@@ -219,7 +219,7 @@ func `unsupported declarations and callees are rejected before Metal emission`(s
 
 @Test func `supported constructors preserve declaration identity`() throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     struct Pair { var value: Float }
     @compute
     func construct(output: Buffer<Float4>, gid: GridIndex) {
@@ -238,7 +238,7 @@ func `unsupported declarations and callees are rejected before Metal emission`(s
 
 @Test func `boolean conditions retain every clause during lowering`() throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     @compute
     func conditional(input: Buffer<Float>, output: Buffer<Float>, gid: GridIndex) {
         let value = input[gid]
@@ -272,7 +272,7 @@ func `unsupported declarations and callees are rejected before Metal emission`(s
 ])
 func `control flow and scalar expressions compile to Metal`(body: String) throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     @compute
     func expressions(input: Buffer<Float>, output: Buffer<Float>, gid: GridIndex) {
         let value = input[gid]
@@ -292,7 +292,7 @@ func `control flow and scalar expressions compile to Metal`(body: String) throws
 
 @Test func `all advertised member attributes compile in stage structs`() throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     struct Vertex {
         @position var position: Float4
         @pointSize var size: Float
@@ -340,8 +340,8 @@ func `control flow and scalar expressions compile to Metal`(body: String) throws
     "struct Bad { @unknown var value: Float }"
 ])
 func `invalid shader language constructs fail type checking`(source: String) throws {
-    try withShader("import SMetal\n" + source) { path in
-        #expect(throws: SMetalError.self) { try TypedAST(path: path) }
+    try withShader("import Schmetal\n" + source) { path in
+        #expect(throws: SchmetalError.self) { try TypedAST(path: path) }
     }
 }
 
@@ -352,7 +352,7 @@ func `invalid shader language constructs fail type checking`(source: String) thr
 ])
 func `advertised scalar and vector constructors compile`(type: String, expression: String) throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     @compute
     func construct(output: Buffer<\(type)>, gid: GridIndex) { output[gid] = \(expression) }
     """) { path in

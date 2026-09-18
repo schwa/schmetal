@@ -44,9 +44,9 @@ struct JSONASTDecoder {
     }
 
     func decode(_ object: [String: Any], label: String? = nil) throws -> ASTNode {
-        guard let kind = object["_kind"] as? String else { throw SMetalError("JSON AST node has no kind") }
+        guard let kind = object["_kind"] as? String else { throw SchmetalError("JSON AST node has no kind") }
         guard (Self.requiredFields[kind] ?? []).allSatisfy({ object[$0] != nil }) else {
-            throw SMetalError("incomplete JSON AST node: \(kind)")
+            throw SchmetalError("incomplete JSON AST node: \(kind)")
         }
         var fields = scalarFields(object)
         fields["source_file"] = file
@@ -70,7 +70,7 @@ struct JSONASTDecoder {
             return [try decode(child, label: label)]
         }
         guard let array = value as? [[String: Any]] else {
-            throw SMetalError("unexpected JSON AST child shape: \(label)")
+            throw SchmetalError("unexpected JSON AST child shape: \(label)")
         }
         let nodes = try array.map { try decode($0) }
         if label == "conditions" {
@@ -134,7 +134,7 @@ struct JSONASTDecoder {
         guard let bytes = origin == file ? source : otherSources[origin],
               let start = range["start"] as? Int, let end = range["end"] as? Int,
               start >= 0, end >= start, end <= bytes.count else {
-            throw SMetalError("unsupported JSON source range or buffer: \(origin)")
+            throw SchmetalError("unsupported JSON source range or buffer: \(origin)")
         }
         let prefix = bytes.prefix(start)
         let line = prefix.filter { $0 == 10 }.count + 1

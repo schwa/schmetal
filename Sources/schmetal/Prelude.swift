@@ -1,7 +1,7 @@
 import Foundation
 
 enum Prelude {
-    static let moduleName = "SMetal"
+    static let moduleName = "Schmetal"
 
     static let source = #"""
     // Global actors encode stages without macros, but impose Swift isolation checks.
@@ -120,10 +120,10 @@ enum Prelude {
     }
 
     static func stage(shaderPath: String) throws -> (directory: URL, prelude: URL, shader: URL) {
-        let directory = FileManager.default.temporaryDirectory.appending(path: "smetal-\(UUID().uuidString)")
+        let directory = FileManager.default.temporaryDirectory.appending(path: "schmetal-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         do {
-            let prelude = directory.appending(path: "SMetalPrelude.swift")
+            let prelude = directory.appending(path: "SchmetalPrelude.swift")
             try source.write(to: prelude, atomically: true, encoding: .utf8)
             let shader = directory.appending(path: "Shader.swift")
             let original = try String(contentsOfFile: shaderPath, encoding: .utf8)

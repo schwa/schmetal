@@ -19,7 +19,7 @@ enum MetalCompiler {
         let output = errors.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         guard process.terminationStatus == 0 else {
-            throw SMetalError("\(tool) \(arguments.joined(separator: " ")) failed:\n" + String(decoding: output, as: UTF8.self))
+            throw SchmetalError("\(tool) \(arguments.joined(separator: " ")) failed:\n" + String(decoding: output, as: UTF8.self))
         }
     }
 }

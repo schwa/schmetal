@@ -2,10 +2,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "smetal",
+    name: "schmetal",
     platforms: [.macOS(.v14)],
     targets: [
-        .executableTarget(name: "smetal"),
-        .testTarget(name: "SMetalTests", dependencies: ["smetal"]),
+        .executableTarget(name: "schmetal"),
+        .testTarget(name: "SchmetalTests", dependencies: ["schmetal"]),
     ]
 )

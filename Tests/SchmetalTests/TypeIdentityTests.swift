@@ -1,14 +1,14 @@
 import Foundation
 import Testing
-@testable import smetal
+@testable import schmetal
 
 @Test(arguments: [
     "typealias Scalar = Swift.Float\ntypealias Chained = Scalar\ntypealias Storage<T> = Buffer<T>",
-    "typealias Scalar = Swift.Float\ntypealias Chained = Swift.Float\ntypealias Storage<T> = SMetalShader.Buffer<T>"
+    "typealias Scalar = Swift.Float\ntypealias Chained = Swift.Float\ntypealias Storage<T> = SchmetalShader.Buffer<T>"
 ])
 func `aliases and generic aliases compile using canonical types`(aliases: String) throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     \(aliases)
     typealias Index = GridIndex
     @compute func copy(input: Storage<Chained>, output: Buffer<Scalar>, gid: Index) {
@@ -27,7 +27,7 @@ func `aliases and generic aliases compile using canonical types`(aliases: String
 
 @Test func `user Float remains distinct from Swift Float`() throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     struct Float { var value: Swift.Float }
     @compute func copy(input: Buffer<Float>, output: Buffer<Swift.Float>, gid: GridIndex) {
         let value = input[gid]
@@ -44,7 +44,7 @@ func `aliases and generic aliases compile using canonical types`(aliases: String
 
 @Test func `nested nominal types and scoped aliases retain identity`() throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     struct First { struct Value { var number: Swift.Float }; typealias Scalar = Swift.Float }
     struct Second { struct Value { var number: Swift.Int32 } }
     typealias FirstBuffer = Buffer<First.Value>
@@ -61,7 +61,7 @@ func `aliases and generic aliases compile using canonical types`(aliases: String
 
 @Test func `local shadowing preserves initializer binding`() throws {
     try withShader("""
-    import SMetal
+    import Schmetal
     @compute func shadow(input: Buffer<Float>, output: Buffer<Float>, gid: GridIndex) {
         let value = input[gid]
         if value > 0 {
